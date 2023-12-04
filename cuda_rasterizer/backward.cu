@@ -14,6 +14,7 @@
 #include <cooperative_groups.h>
 #include <cooperative_groups/reduce.h>
 namespace cg = cooperative_groups;
+#include <iostream>
 
 // Backward pass for conversion of spherical harmonics to RGB for
 // each Gaussian.
@@ -584,6 +585,7 @@ void BACKWARD::preprocess(
 	// Somewhat long, thus it is its own kernel rather than being part of 
 	// "preprocess". When done, loss gradient w.r.t. 3D means has been
 	// modified and gradient w.r.t. 3D covariance matrix has been computed.	
+	std::cout << "223 in here4" << std::endl;
 	computeCov2DCUDA << <(P + 255) / 256, 256 >> > (
 		P,
 		means3D,
@@ -601,6 +603,7 @@ void BACKWARD::preprocess(
 	// Propagate gradients for remaining steps: finish 3D mean gradients,
 	// propagate color gradients to SH (if desireD), propagate 3D covariance
 	// matrix gradients to scale and rotation.
+	std::cout << "2232 in here4" << std::endl;
 	preprocessCUDA<NUM_CHANNELS> << < (P + 255) / 256, 256 >> > (
 		P, D, M,
 		(float3*)means3D,
@@ -619,6 +622,7 @@ void BACKWARD::preprocess(
 		dL_dsh,
 		dL_dscale,
 		dL_drot);
+	std::cout << "22342 in here4" << std::endl;
 }
 
 void BACKWARD::render(

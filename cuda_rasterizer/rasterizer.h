@@ -29,7 +29,7 @@ namespace CudaRasterizer
 			float* projmatrix,
 			bool* present);
 
-		static std::tuple<int, torch::Tensor, torch::Tensor, torch::Tensor,torch::Tensor>  forward(
+		static std::tuple<int, torch::Tensor>  forward(
 			std::function<char* (size_t)> geometryBuffer,
 			std::function<char* (size_t)> binningBuffer,
 			std::function<char* (size_t)> imageBuffer,
@@ -50,6 +50,7 @@ namespace CudaRasterizer
 			const float tan_fovx, float tan_fovy,
 			const bool prefiltered,
 			float* out_color,
+			float* out_depth,
 			int* radii = nullptr,
 			bool debug = false);
 

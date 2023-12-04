@@ -198,7 +198,7 @@ CudaRasterizer::BinningState CudaRasterizer::BinningState::fromChunk(char*& chun
 
 // Forward rendering procedure for differentiable rasterization
 // of Gaussians.
-std::tuple<int, torch::Tensor, torch::Tensor,torch::Tensor,torch::Tensor> CudaRasterizer::Rasterizer::forward(
+std::tuple<int, torch::Tensor> CudaRasterizer::Rasterizer::forward(
 	std::function<char* (size_t)> geometryBuffer,
 	std::function<char* (size_t)> binningBuffer,
 	std::function<char* (size_t)> imageBuffer,
@@ -219,6 +219,7 @@ std::tuple<int, torch::Tensor, torch::Tensor,torch::Tensor,torch::Tensor> CudaRa
 	const float tan_fovx, float tan_fovy,
 	const bool prefiltered,
 	float* out_color,
+	float* out_depth,
 	int* radii,
 	bool debug)
 {
@@ -320,30 +321,36 @@ std::tuple<int, torch::Tensor, torch::Tensor,torch::Tensor,torch::Tensor> CudaRa
 			imgState.ranges);
 	CHECK_CUDA(, debug)
 
-	//Rohith code started
-	uint64_t* cpuData_keys;
-	cpuData_keys = (uint64_t*)malloc(sizeof(uint64_t) * num_rendered);
-	cudaMemcpy(cpuData_keys, binningState.point_list_keys,num_rendered*sizeof(uint64_t), cudaMemcpyDeviceToHost);
-	torch::TensorOptions options = torch::TensorOptions().dtype(torch::kInt64);
-	torch::Tensor tensor_keys = torch::from_blob(cpuData_keys, {num_rendered}, options);
+	// //Rohith code started
+	// uint64_t* cpuData_keys;
+	// cpuData_keys = (uint64_t*)malloc(sizeof(uint64_t) * num_rendered);
+	// cudaMemcpy(cpuData_keys, binningState.point_list_keys,num_rendered*sizeof(uint64_t), cudaMemcpyDeviceToHost);
+	// torch::TensorOptions options = torch::TensorOptions().dtype(torch::kInt64);
+	// torch::Tensor tensor_keys = torch::from_blob(cpuData_keys, {num_rendered}, options);
 
-	uint32_t* cpuData_vals;
-	cpuData_vals = (uint32_t*)malloc(sizeof(uint32_t) * num_rendered);
-	cudaMemcpy(cpuData_vals, binningState.point_list,num_rendered*sizeof(uint32_t), cudaMemcpyDeviceToHost);
-	torch::TensorOptions options_32 = torch::TensorOptions().dtype(torch::kInt32);
-	torch::Tensor tensor_vals = torch::from_blob(cpuData_vals, {num_rendered}, options_32);
+	// uint32_t* cpuData_vals;
+	// cpuData_vals = (uint32_t*)malloc(sizeof(uint32_t) * num_rendered);
+	// cudaMemcpy(cpuData_vals, binningState.point_list,num_rendered*sizeof(uint32_t), cudaMemcpyDeviceToHost);
+	// torch::TensorOptions options_32 = torch::TensorOptions().dtype(torch::kInt32);
+	// torch::Tensor tensor_vals = torch::from_blob(cpuData_vals, {num_rendered}, options_32);
 
-	uint2* cpuData_ranges;
-	cpuData_ranges = (uint2*)malloc(tile_grid.x * tile_grid.y * sizeof(uint2));
-	cudaMemcpy(cpuData_ranges, imgState.ranges, tile_grid.x * tile_grid.y * sizeof(uint2), cudaMemcpyDeviceToHost);
-	torch::TensorOptions options_322 = torch::TensorOptions().dtype(torch::kInt32);
-	torch::Tensor tensor_ranges = torch::from_blob(cpuData_ranges, {tile_grid.x * tile_grid.y * 2}, options_322);
+	// uint2* cpuData_ranges;
+	// cpuData_ranges = (uint2*)malloc(tile_grid.x * tile_grid.y * sizeof(uint2));
+	// cudaMemcpy(cpuData_ranges, imgState.ranges, tile_grid.x * tile_grid.y * sizeof(uint2), cudaMemcpyDeviceToHost);
+	// torch::TensorOptions options_322 = torch::TensorOptions().dtype(torch::kInt32);
+	// torch::Tensor tensor_ranges = torch::from_blob(cpuData_ranges, {tile_grid.x * tile_grid.y * 2}, options_322);
 
 	torch::TensorOptions float_options;
 	torch::Device device(torch::kCUDA, 0);
 	float_options = float_options.dtype(c10::ScalarType::Float).device(device);
 	torch::Tensor out_weights = torch::full({num_rendered * BLOCK_SIZE}, 0.0,float_options);
  
+	float* accum_alphas_cpu = (float*)malloc(width *  height * sizeof(float));
+	cudaMemcpy(accum_alphas_cpu, imgState.accum_alpha, width *  height * sizeof(float), cudaMemcpyDeviceToHost);
+	torch::TensorOptions options_322 = torch::TensorOptions().dtype(torch::kInt32);
+	torch::Tensor tensor_accum_alphas = torch::from_blob(accum_alphas_cpu, {width *  height * 4}, options_322);
+
+
 	// Let each tile blend its range of Gaussians independently in parallel
 	const float* feature_ptr = colors_precomp != nullptr ? colors_precomp : geomState.rgb;
 	CHECK_CUDA(FORWARD::render(
@@ -352,14 +359,16 @@ std::tuple<int, torch::Tensor, torch::Tensor,torch::Tensor,torch::Tensor> CudaRa
 		binningState.point_list,
 		width, height,
 		geomState.means2D,
+		geomState.depths,
 		feature_ptr,
 		geomState.conic_opacity,
 		imgState.accum_alpha,
 		imgState.n_contrib,
 		background,
 		out_color,
+		out_depth,
 		out_weights.contiguous().data<float>(), num_rendered), debug)
-	return std::make_tuple(num_rendered, tensor_keys,tensor_vals, tensor_ranges, out_weights);
+	return std::make_tuple(num_rendered, tensor_accum_alphas);
 }
 
 // Produce necessary gradients for optimization, corresponding
@@ -409,6 +418,7 @@ void CudaRasterizer::Rasterizer::backward(
 
 	const dim3 tile_grid((width + BLOCK_X - 1) / BLOCK_X, (height + BLOCK_Y - 1) / BLOCK_Y, 1);
 	const dim3 block(BLOCK_X, BLOCK_Y, 1);
+	std::cout << "in here2" << std::endl;
 
 	// Compute loss gradients w.r.t. 2D mean position, conic matrix,
 	// opacity and RGB of Gaussians from per-pixel loss gradients.
@@ -432,6 +442,7 @@ void CudaRasterizer::Rasterizer::backward(
 		dL_dopacity,
 		dL_dcolor), debug)
 
+	std::cout << "in here3" << std::endl;
 	// Take care of the rest of preprocessing. Was the precomputed covariance
 	// given to us or a scales/rot pair? If precomputed, pass that. If not,
 	// use the one we computed ourselves.
@@ -458,4 +469,6 @@ void CudaRasterizer::Rasterizer::backward(
 		dL_dsh,
 		(glm::vec3*)dL_dscale,
 		(glm::vec4*)dL_drot), debug)
+	std::cout << "in here4" << std::endl;
+
 }
