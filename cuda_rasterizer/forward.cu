@@ -270,7 +270,8 @@ renderCUDA(
 	float* __restrict__ final_T,
 	uint32_t* __restrict__ n_contrib,
 	const float* __restrict__ bg_color,
-	float* __restrict__ out_color)
+	float* __restrict__ out_color,
+	float* __restrict__ out_weights, int num_rendered)
 {
 	// Identify current tile and associated min/max pixel range.
 	auto block = cg::this_thread_block();
@@ -301,6 +302,10 @@ renderCUDA(
 	uint32_t contributor = 0;
 	uint32_t last_contributor = 0;
 	float C[CHANNELS] = { 0 };
+
+	uint32_t start_index = (BLOCK_SIZE * range.x);
+	uint32_t num_gaussians_in_this_block = (range.y - range.x);
+	uint32_t pixel_index_in_block = block.thread_index().y * BLOCK_X + block.thread_index().x;
 
 	// Iterate over batches until all done or range is complete
 	for (int i = 0; i < rounds; i++, toDo -= BLOCK_SIZE)
@@ -341,6 +346,8 @@ renderCUDA(
 			// and its exponential falloff from mean.
 			// Avoid numerical instabilities (see paper appendix). 
 			float alpha = min(0.99f, con_o.w * exp(power));
+
+			out_weights[start_index + pixel_index_in_block * num_gaussians_in_this_block + i * BLOCK_SIZE + j] = alpha * T;
 			if (alpha < 1.0f / 255.0f)
 				continue;
 			float test_T = T * (1 - alpha);
@@ -384,7 +391,8 @@ void FORWARD::render(
 	float* final_T,
 	uint32_t* n_contrib,
 	const float* bg_color,
-	float* out_color)
+	float* out_color,
+	float* out_weights, int num_rendered)
 {
 	renderCUDA<NUM_CHANNELS> << <grid, block >> > (
 		ranges,
@@ -396,7 +404,8 @@ void FORWARD::render(
 		final_T,
 		n_contrib,
 		bg_color,
-		out_color);
+		out_color,
+		out_weights, num_rendered);
 }
 
 void FORWARD::preprocess(int P, int D, int M,

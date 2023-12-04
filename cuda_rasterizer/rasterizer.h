@@ -14,6 +14,7 @@
 
 #include <vector>
 #include <functional>
+#include <torch/extension.h>
 
 namespace CudaRasterizer
 {
@@ -28,7 +29,7 @@ namespace CudaRasterizer
 			float* projmatrix,
 			bool* present);
 
-		static int forward(
+		static std::tuple<int, torch::Tensor, torch::Tensor, torch::Tensor,torch::Tensor>  forward(
 			std::function<char* (size_t)> geometryBuffer,
 			std::function<char* (size_t)> binningBuffer,
 			std::function<char* (size_t)> imageBuffer,
