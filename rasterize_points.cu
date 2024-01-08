@@ -32,6 +32,13 @@ std::function<char*(size_t N)> resizeFunctional(torch::Tensor& t) {
     return lambda;
 }
 
+std::function<char*(size_t N)> resizeFunctionalDummy(torch::Tensor& t, auto actual_N) {
+    auto lambda = [&t, actual_N](size_t N) {
+		return reinterpret_cast<char*>(t.contiguous().data_ptr());
+    };
+    return lambda;
+}
+
 std::tuple<int, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
 RasterizeGaussiansCUDA(
 	const torch::Tensor& background,
@@ -73,10 +80,25 @@ RasterizeGaussiansCUDA(
   torch::Tensor geomBuffer = torch::empty({0}, options.device(device));
   torch::Tensor binningBuffer = torch::empty({0}, options.device(device));
   torch::Tensor imgBuffer = torch::empty({0}, options.device(device));
-  std::function<char*(size_t)> geomFunc = resizeFunctional(geomBuffer);
-  std::function<char*(size_t)> binningFunc = resizeFunctional(binningBuffer);
-  std::function<char*(size_t)> imgFunc = resizeFunctional(imgBuffer);
-  
+
+
+
+//   std::function<char*(size_t)> geomFunc = resizeFunctional(geomBuffer);
+//   std::function<char*(size_t)> binningFunc = resizeFunctional(binningBuffer);
+//   std::function<char*(size_t)> imgFunc = resizeFunctional(imgBuffer);
+
+  size_t bigbuffer_size = 1000000;  // make it a param
+  size_t binningbuffer_size = 100000000;
+  size_t imagebuffer_size = 640128;
+  binningBuffer.resize_({(long long)binningbuffer_size});
+  geomBuffer.resize_({(long long)bigbuffer_size});
+  imgBuffer.resize_({(long long)imagebuffer_size});
+
+  std::function<char*(size_t)> geomFunc = resizeFunctionalDummy(geomBuffer, bigbuffer_size);
+  std::function<char*(size_t)> binningFunc = resizeFunctionalDummy(binningBuffer, binningbuffer_size);
+  std::function<char*(size_t)> imgFunc = resizeFunctionalDummy(imgBuffer, imagebuffer_size);
+
+
   int rendered = 0;
   if(P != 0)
   {
