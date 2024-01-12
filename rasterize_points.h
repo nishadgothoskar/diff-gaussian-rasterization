@@ -25,8 +25,8 @@ struct FwdDescriptor {
     int image_width;
     int degree;
     int P;
-    float tan_fovx;
-    float tan_fovy;
+    double tan_fovx;
+    double tan_fovy;
 };
 
 void RasterizeGaussiansCUDAJAX(

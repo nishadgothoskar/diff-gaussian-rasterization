@@ -31,24 +31,22 @@ pybind11::dict Registrations() {
   return dict;
 }
 
+auto BuildFwdDescriptor(int image_height, int image_width, int degree, int P, double tan_fovx, double tan_fovy) {
+  FwdDescriptor d;
+  d.image_height = image_height;
+  d.image_width = image_width;
+  d.degree = degree;
+  d.P = P;
+  d.tan_fovx = tan_fovx;
+  d.tan_fovy = tan_fovy;
+  return PackDescriptor(d);
+}
+
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.def("rasterize_gaussians", &RasterizeGaussiansCUDA);
   m.def("rasterize_gaussians_backward", &RasterizeGaussiansBackwardCUDA);
   m.def("mark_visible", &markVisible);
   m.def("registrations", &Registrations, "custom call registrations");
-  m.def("build_gaussian_rasterize_fwd_descriptor",
-          [](int image_height,
-    int image_width,
-    int degree,
-    int P, float tan_fovx, float tan_fovy) {
-          FwdDescriptor d;
-          d.image_height = image_height;
-          d.image_width = image_width;
-          d.degree = degree;
-          d.P = P;
-          d.tan_fovx = tan_fovx;
-          d.tan_fovy = tan_fovy;
-          return PackDescriptor(d);
-      });
+  m.def("build_gaussian_rasterize_fwd_descriptor", &BuildFwdDescriptor);
 }
