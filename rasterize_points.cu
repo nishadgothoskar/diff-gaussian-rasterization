@@ -161,6 +161,7 @@ void RasterizeGaussiansCUDAJAX(
 		out_color,
 		radii,
 		debug);
+		
 	}
 	// return std::make_tuple(rendered, out_color, radii, geomBuffer, binningBuffer, imgBuffer);
 }
