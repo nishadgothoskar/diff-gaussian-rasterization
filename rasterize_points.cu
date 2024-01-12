@@ -163,10 +163,10 @@ void RasterizeGaussiansCUDAJAX(
 		debug);
 		
 	}
+	cudaMemcpy(out_num_rendered, &rendered, sizeof(int), cudaMemcpyDefault);
+
 	// return std::make_tuple(rendered, out_color, radii, geomBuffer, binningBuffer, imgBuffer);
 }
-
-
 
 std::tuple<int, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
 RasterizeGaussiansCUDA(

@@ -279,6 +279,7 @@ int CudaRasterizer::Rasterizer::forward(
 	// Retrieve total number of Gaussian instances to launch and resize aux buffers
 	int num_rendered;
 	CHECK_CUDA(cudaMemcpy(&num_rendered, geomState.point_offsets + P - 1, sizeof(int), cudaMemcpyDeviceToHost), debug);
+	// CHECK_CUDA(cudaMemcpy(out_num_rendered, &num_rendered, sizeof(int), cudaMemcpyDefault), debug);
 
 	size_t binning_chunk_size = required<BinningState>(num_rendered);
 	char* binning_chunkptr = binningBuffer(binning_chunk_size);
