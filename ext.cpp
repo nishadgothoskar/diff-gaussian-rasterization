@@ -61,4 +61,5 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.def("mark_visible", &markVisible);
   m.def("registrations", &Registrations, "custom call registrations");
   m.def("build_gaussian_rasterize_fwd_descriptor", &BuildFwdDescriptor);
+  m.def("build_gaussian_rasterize_bwd_descriptor", &BuildBwdDescriptor);
 }

@@ -2,7 +2,7 @@
 import diff_gaussian_rasterization as dgr
 from diff_gaussian_rasterization import GaussianRasterizationSettings, GaussianRasterizer
 from diff_gaussian_rasterization import _C as torch_backend
-from jax_renderer import _build_rasterize_gaussians_fwd_primitive
+from jax_renderer import _build_rasterize_gaussians_fwd_primitive, _build_rasterize_gaussians_bwd_primitive
 
 import jax
 import jax.numpy as jnp
@@ -115,7 +115,7 @@ raster_settings = GaussianRasterizationSettings(
 )
 rasterizer_fwd_torch = GaussianRasterizer(raster_settings=raster_settings)
 
-torch_args = (
+torch_fwd_args = (
     raster_settings.bg, 
     means3D,
     colors_precomp,
@@ -136,11 +136,41 @@ torch_args = (
     raster_settings.prefiltered,
     raster_settings.debug
 )
-start = time()
-torch_outs = torch_backend.rasterize_gaussians(*torch_args)
-end = time() 
 
-print(f"Elapsed time = {end - start} s")
+## Forward
+torch_outs = torch_backend.rasterize_gaussians(*torch_fwd_args)
+num_rendered_torch, color_torch, radii_torch, geomBuffer_torch, binningBuffer_torch, imgBuffer_torch = torch_outs
+
+## Backward
+dummy_out_color_torch = torch.tensor(torch.rand((3, int(intrinsics.height), int(intrinsics.width))), requires_grad=False, device=device).detach()
+grad_out_color_torch = dummy_out_color_torch - color_torch
+
+torch_bwd_args = (
+    raster_settings.bg,
+    means3D, 
+    radii_torch, 
+    colors_precomp, 
+    scales, 
+    rotations, 
+    raster_settings.scale_modifier, 
+    cov3D_precomp, 
+    raster_settings.viewmatrix, 
+    raster_settings.projmatrix, 
+    raster_settings.tanfovx, 
+    raster_settings.tanfovy, 
+    grad_out_color_torch, 
+    sh, 
+    raster_settings.sh_degree, 
+    raster_settings.campos,
+    geomBuffer_torch,
+    num_rendered_torch,
+    binningBuffer_torch,
+    imgBuffer_torch,
+    raster_settings.debug
+)
+torch_outs = torch_backend.rasterize_gaussians_backward(*torch_bwd_args)
+grad_means2D_torch, grad_colors_precomp_torch, grad_opacities_torch, grad_means3D_torch, grad_cov3Ds_precomp_torch, grad_sh_torch, grad_scales_torch, grad_rotations_torch = torch_outs
+
 
 ##############################
 # Jax
@@ -148,7 +178,11 @@ print(f"Elapsed time = {end - start} s")
 print("==========JAX==========")
 
 rasterizer_fwd_jax = _build_rasterize_gaussians_fwd_primitive()
-jax_args = (torch_to_jax(means3D),
+
+## Forward
+print("Jax fwd")
+jax_fwd_args = (torch_to_jax(raster_settings.bg),
+            torch_to_jax(means3D),
             torch_to_jax(colors_precomp),
             torch_to_jax(opacity),
             torch_to_jax(scales),
@@ -156,29 +190,60 @@ jax_args = (torch_to_jax(means3D),
             torch_to_jax(cov3D_precomp),
             torch_to_jax(view_matrix),
             torch_to_jax(projmatrix),
-            torch_to_jax(sh))
+            torch_to_jax(sh),
+            torch_to_jax(raster_settings.campos)
+        )
 for iter in range(1,3):
-    start = time()
     jax_outs = rasterizer_fwd_jax.bind(
-                jnp.zeros(3), # bg
-                *jax_args,
-                jnp.zeros(3), # campos
+                *jax_fwd_args,
                 tanfovx=tan_fovx, 
                 tanfovy=tan_fovy, 
                 image_height=int(intrinsics.height), 
                 image_width=int(intrinsics.width),  
                 sh_degree=0
     )  
-    end = time() 
-    print(f"Elapsed time (iter {iter})= {end - start} s")
-
-
-########################
-# Compare values
-########################
-num_rendered_torch, color_torch, radii_torch, geomBuffer_torch, binningBuffer_torch, imgBuffer_torch = torch_outs
-
 num_rendered_jax, color_jax, radii_jax, geomBuffer_jax, binningBuffer_jax, imgBuffer_jax = jax_outs
+
+
+## Backward
+rasterizer_bwd_jax = _build_rasterize_gaussians_bwd_primitive()
+dummy_out_color_jax = torch_to_jax(dummy_out_color_torch)
+grad_out_color_jax = dummy_out_color_jax - color_jax
+
+jax_bwd_args = (
+    torch_to_jax(raster_settings.bg),
+    torch_to_jax(means3D), 
+    torch_to_jax(radii_torch), 
+    torch_to_jax(colors_precomp), 
+    torch_to_jax(scales), 
+    torch_to_jax(rotations), 
+    # raster_settings.scale_modifier), 
+    torch_to_jax(cov3D_precomp), 
+    torch_to_jax(raster_settings.viewmatrix), 
+    torch_to_jax(raster_settings.projmatrix), 
+    grad_out_color_jax,
+    torch_to_jax(sh), 
+    torch_to_jax(raster_settings.campos),
+    geomBuffer_jax,
+    num_rendered_jax, 
+    binningBuffer_jax,
+    imgBuffer_jax
+)
+for iter in range(1,3):
+    print("Jax bwd")
+    jax_outs = rasterizer_bwd_jax.bind(
+                *jax_bwd_args,
+                tanfovx=tan_fovx, 
+                tanfovy=tan_fovy, 
+                sh_degree=0
+    )  
+grad_means2D_jax, grad_colors_precomp_jax, grad_opacities_jax, grad_means3D_jax, grad_cov3Ds_precomp_jax, grad_sh_jax, grad_scales_jax, grad_rotations_jax = jax_outs
+
+# ########################
+# # Compare values
+# ########################
+
+print("-------------------------\nTESTING FORWARD\n-------------------------")
 
 # (1) num_rendered
 print("\n")
@@ -209,6 +274,15 @@ print(f"imgBuffer jax: sum {imgBuffer_jax.sum().item()}, min {imgBuffer_jax.min(
 print(f"imgBuffer PASS: {jnp.isclose(torch_to_jax(imgBuffer_torch), imgBuffer_jax[:imgBuffer_torch.shape[0]]).all()}")
 
 
+print("-------------------------\nTESTING BACKWARD\n-------------------------")
 
+print(f"grad_means2D PASS: {jnp.isclose(torch_to_jax(grad_means2D_torch), grad_means2D_jax).all()}")
+print(f"grad_colors_precomp PASS: {jnp.isclose(torch_to_jax(grad_colors_precomp_torch), grad_colors_precomp_jax).all()}")
+print(f"grad_opacities PASS: {jnp.isclose(torch_to_jax(grad_opacities_torch), grad_opacities_jax).all()}")
+print(f"grad_means3D PASS: {jnp.isclose(torch_to_jax(grad_means3D_torch), grad_means3D_jax).all()}")
+print(f"grad_cov3Ds_precomp PASS: {jnp.isclose(torch_to_jax(grad_cov3Ds_precomp_torch), grad_cov3Ds_precomp_jax).all()}")
+print(f"grad_sh PASS: {jnp.isclose(torch_to_jax(grad_sh_torch), grad_sh_jax).all()}")
+print(f"grad_scales PASS: {jnp.isclose(torch_to_jax(grad_scales_torch), grad_scales_jax).all()}")
+print(f"grad_rotations PASS: {jnp.isclose(torch_to_jax(grad_rotations_torch), grad_rotations_jax).all()}")
 
 from IPython import embed; embed()
