@@ -27,9 +27,30 @@ struct FwdDescriptor {
     int P;
     float tan_fovx;
     float tan_fovy;
+	// TODO scale_modifier
 };
 
+struct BwdDescriptor {
+    int image_height;
+    int image_width;
+    int degree;
+    int P;
+    float tan_fovx;
+    float tan_fovy;
+	// TODO scale_modifier
+};
+
+
+//-------------------------------------------------------------------------
+// Prototypes.
+
 void RasterizeGaussiansCUDAJAX(
+	cudaStream_t stream,
+	void **buffers,
+	const char *opaque, std::size_t opaque_len
+);
+
+void RasterizeGaussiansBackwardCUDAJAX(
 	cudaStream_t stream,
 	void **buffers,
 	const char *opaque, std::size_t opaque_len

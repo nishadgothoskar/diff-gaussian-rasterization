@@ -196,14 +196,17 @@ print(f"radii PASS: {jnp.isclose(torch_to_jax(radii_torch), radii_jax).all()}")
 print("\n")
 print(f"geomBuffer torch: sum {geomBuffer_torch.sum().item()}, min {geomBuffer_torch.min().item()}, max {geomBuffer_torch.max().item()}")
 print(f"geomBuffer jax: sum {geomBuffer_jax.sum().item()}, min {geomBuffer_jax.min().item()}, max {geomBuffer_jax.max().item()}")
+print(f"geomBuffer PASS: {jnp.isclose(torch_to_jax(geomBuffer_torch), geomBuffer_jax[:geomBuffer_torch.shape[0]]).all()}")
 
 print()
 print(f"binningBuffer torch: sum {binningBuffer_torch.sum().item()}, min {binningBuffer_torch.min().item()}, max {binningBuffer_torch.max().item()}")
 print(f"binningBuffer jax: sum {binningBuffer_jax.sum().item()}, min {binningBuffer_jax.min().item()}, max {binningBuffer_jax.max().item()}")
+print(f"binningBuffer PASS: {jnp.isclose(torch_to_jax(binningBuffer_torch), binningBuffer_jax[:binningBuffer_torch.shape[0]]).all()}")
 
 print()
 print(f"imgBuffer torch: sum {imgBuffer_torch.sum().item()}, min {imgBuffer_torch.min().item()}, max {imgBuffer_torch.max().item()}")
 print(f"imgBuffer jax: sum {imgBuffer_jax.sum().item()}, min {imgBuffer_jax.min().item()}, max {imgBuffer_jax.max().item()}")
+print(f"imgBuffer PASS: {jnp.isclose(torch_to_jax(imgBuffer_torch), imgBuffer_jax[:imgBuffer_torch.shape[0]]).all()}")
 
 
 

@@ -164,8 +164,6 @@ void RasterizeGaussiansCUDAJAX(
 		
 	}
 	cudaMemcpy(out_num_rendered, &rendered, sizeof(int), cudaMemcpyDefault);
-
-	// return std::make_tuple(rendered, out_color, radii, geomBuffer, binningBuffer, imgBuffer);
 }
 
 std::tuple<int, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
@@ -249,6 +247,119 @@ RasterizeGaussiansCUDA(
   }
   return std::make_tuple(rendered, out_color, radii, geomBuffer, binningBuffer, imgBuffer);
 }
+
+
+
+void RasterizeGaussiansBackwardCUDAJAX(
+	cudaStream_t stream,
+	void **buffers,
+	const char *opaque, std::size_t opaque_len
+){
+ 	// const torch::Tensor& background,
+	// const torch::Tensor& means3D,
+	// const torch::Tensor& radii,
+    // const torch::Tensor& colors,
+	// const torch::Tensor& scales,
+	// const torch::Tensor& rotations,
+	// const float scale_modifier,
+	// const torch::Tensor& cov3D_precomp,
+	// const torch::Tensor& viewmatrix,
+    // const torch::Tensor& projmatrix,
+	// const float tan_fovx,
+	// const float tan_fovy,
+    // const torch::Tensor& dL_dout_color,
+	// const torch::Tensor& sh,
+	// const int degree,
+	// const torch::Tensor& campos,
+	// const torch::Tensor& geomBuffer,
+	// const int R, (num_rendered)
+	// const torch::Tensor& binningBuffer,
+	// const torch::Tensor& imageBuffer,
+	// const bool debug
+
+    const BwdDescriptor &descriptor = 
+        *UnpackDescriptor<BwdDescriptor>(opaque, opaque_len);
+	// image_height, image_width, degree, P
+
+	// inputs
+    const float* background = reinterpret_cast<const float*> (buffers[0]);
+    const float* means3D = reinterpret_cast<const float*> (buffers[1]);
+    const int* radii = reinterpret_cast<const int*> (buffers[2]);
+    const float* colors = reinterpret_cast<const float*> (buffers[3]);
+    const float* scales = reinterpret_cast<const float*> (buffers[4]);
+    const float* rotations = reinterpret_cast<const float*> (buffers[5]);
+	float scale_modifier = 1.0;
+    const float* cov3D_precomp = reinterpret_cast<const float*> (buffers[6]);
+    const float* viewmatrix = reinterpret_cast<const float*> (buffers[7]);
+    const float* projmatrix = reinterpret_cast<const float*> (buffers[8]);
+	const float tan_fovx = descriptor.tan_fovx; 
+	const float tan_fovy = descriptor.tan_fovy;
+	const float* dL_dout_color = reinterpret_cast<const float*> (buffers[9]);
+	const float* sh = reinterpret_cast<const float*> (buffers[10]);
+	const int degree = descriptor.degree;
+	const float* campos = reinterpret_cast<const float*> (buffers[11]);
+	const char* geomBuffer = reinterpret_cast<const char*> (buffers[12]);
+	const int R = 
+	const char* binningBuffer = reinterpret_cast<const char*> (buffers[13]);
+	const char* imageBuffer = reinterpret_cast<const char*> (buffers[14]);
+	const bool debug = false;
+
+	// outputs
+	const float* dL_means2D = reinterpret_cast<const float*> (buffers[15]);
+	const float* dL_colors_precomp = reinterpret_cast<const float*> (buffers[16]);
+	const float* dL_opacities = reinterpret_cast<const float*> (buffers[17]);
+	const float* dL_means3D = reinterpret_cast<const float*> (buffers[18]);
+	const float* dL_cov3Ds_precomp = reinterpret_cast<const float*> (buffers[19]);
+	const float* dL_sh = reinterpret_cast<const float*> (buffers[20]);
+	const float* dL_scales = reinterpret_cast<const float*> (buffers[21]);
+	const float* dL_rotations = reinterpret_cast<const float*> (buffers[22]);
+
+	const int P = descriptor.P;
+	const int H = descriptor.image_height; // dL_dout_color.size(1)
+	const int W = descriptor.image_width; // dL_dout_color.size(2)
+
+	int M = 0;
+	if(sh.size(0) != 0)
+	{	
+		M = sh.size(1);
+	}
+
+	if(P != 0)
+	{  
+		CudaRasterizer::Rasterizer::backward(P, degree, M, R,
+		background,
+		W, H, 
+		means3D,
+		sh,
+		colors,
+		scales,
+		scale_modifier,
+		rotations,
+		cov3D_precomp,
+		viewmatrix,
+		projmatrix,
+		campos,
+		tan_fovx,
+		tan_fovy,
+		radii,
+		geomBuffer,
+		binningBuffer,
+		imageBuffer,
+		dL_dout_color,
+		dL_dmeans2D,
+		dL_dconic,  
+		dL_dopacity,
+		dL_dcolors,
+		dL_dmeans3D,
+		dL_dcov3D,
+		dL_dsh,
+		dL_dscales,
+		dL_drotations,
+		debug);
+	}
+}
+
+
 
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
  RasterizeGaussiansBackwardCUDA(

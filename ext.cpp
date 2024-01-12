@@ -28,11 +28,23 @@ pybind11::capsule EncapsulateFunction(T* fn) {
 pybind11::dict Registrations() {
   pybind11::dict dict;
   dict["rasterize_gaussians_fwd"] = EncapsulateFunction(RasterizeGaussiansCUDAJAX);
+  dict["rasterize_gaussians_bwd"] = EncapsulateFunction(RasterizeGaussiansBackwardCUDAJAX);
   return dict;
 }
 
 auto BuildFwdDescriptor(int image_height, int image_width, int degree, int P, float tan_fovx, float tan_fovy) {
   FwdDescriptor d;
+  d.image_height = image_height;
+  d.image_width = image_width;
+  d.degree = degree;
+  d.P = P;
+  d.tan_fovx = tan_fovx;
+  d.tan_fovy = tan_fovy;
+  return PackDescriptor(d);
+}
+
+auto BuildBwdDescriptor(int image_height, int image_width, int degree, int P, float tan_fovx, float tan_fovy) {
+  BwdDescriptor d;
   d.image_height = image_height;
   d.image_width = image_width;
   d.degree = degree;
