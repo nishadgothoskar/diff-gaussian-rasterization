@@ -91,11 +91,11 @@ def _build_rasterize_gaussians_fwd_primitive():
             projmatrix,
             sh,
             campos,
-            tanfovx=0.75, 
-            tanfovy=1.33, 
-            image_height=300, 
-            image_width=200,  
-            sh_degree=0
+            tanfovx, 
+            tanfovy, 
+            image_height, 
+            image_width,  
+            sh_degree
         ):
         float_to_ir = mlir.dtype_to_ir_type(np.dtype(np.float32))
         int_to_ir = mlir.dtype_to_ir_type(np.dtype(np.int32))
@@ -232,9 +232,9 @@ def _build_rasterize_gaussians_bwd_primitive():
             num_rendered_array,
             binningBuffer,
             imgBuffer,
-            tanfovx=0.75, 
-            tanfovy=1.33, 
-            sh_degree=0
+            tanfovx, 
+            tanfovy, 
+            sh_degree
     ):
         float_to_ir = mlir.dtype_to_ir_type(np.dtype(np.float32))
 

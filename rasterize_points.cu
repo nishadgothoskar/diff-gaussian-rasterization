@@ -302,21 +302,20 @@ void RasterizeGaussiansBackwardCUDAJAX(
 	const int degree = descriptor.degree;
 	const float* campos = reinterpret_cast<const float*> (buffers[11]);
 	char* geomBuffer = reinterpret_cast<char*> (buffers[12]);
-	const int R = *(reinterpret_cast<const int*> (buffers[13]));
-	printf("in backward; const inst R = %d", R);
-	char* binningBuffer = reinterpret_cast<char*> (buffers[13]);
-	char* imageBuffer = reinterpret_cast<char*> (buffers[14]);
+	int* _R = static_cast<int*> (buffers[13]);
+	char* binningBuffer = reinterpret_cast<char*> (buffers[14]);
+	char* imageBuffer = reinterpret_cast<char*> (buffers[15]);
 	const bool debug = false;
-
+	
 	// outputs
-	float* dL_dmeans2D = reinterpret_cast<float*> (buffers[15]);
-	float* dL_dcolors = reinterpret_cast<float*> (buffers[16]);
-	float* dL_dopacity = reinterpret_cast<float*> (buffers[17]);
-	float* dL_dmeans3D = reinterpret_cast<float*> (buffers[18]);
-	float* dL_dcov3D = reinterpret_cast<float*> (buffers[19]);
-	float* dL_dsh = reinterpret_cast<float*> (buffers[20]);
-	float* dL_dscales = reinterpret_cast<float*> (buffers[21]);
-	float* dL_drotations = reinterpret_cast<float*> (buffers[22]);
+	float* dL_dmeans2D = reinterpret_cast<float*> (buffers[16]);
+	float* dL_dcolors = reinterpret_cast<float*> (buffers[17]);
+	float* dL_dopacity = reinterpret_cast<float*> (buffers[18]);
+	float* dL_dmeans3D = reinterpret_cast<float*> (buffers[19]);
+	float* dL_dcov3D = reinterpret_cast<float*> (buffers[20]);
+	float* dL_dsh = reinterpret_cast<float*> (buffers[21]);
+	float* dL_dscales = reinterpret_cast<float*> (buffers[22]);
+	float* dL_drotations = reinterpret_cast<float*> (buffers[23]);
 	auto options = torch::TensorOptions().device(torch::kCUDA).requires_grad(true);
 	torch::Tensor dL_dconic = torch::zeros({P, 2, 2}, options);
 
@@ -326,6 +325,10 @@ void RasterizeGaussiansBackwardCUDAJAX(
 	// 	M = sh.size(1);
 	// } // TODO
 
+	int R = 423;
+	printf("Hardcoded R=%d\n", R);
+
+	printf("Entering bwd\n");
 	if(P != 0)
 	{  
 		CudaRasterizer::Rasterizer::backward(P, degree, M, R,
@@ -359,6 +362,8 @@ void RasterizeGaussiansBackwardCUDAJAX(
 		dL_drotations,
 		debug);
 	}
+	printf("Exiting bwd\n");
+
 }
 
 

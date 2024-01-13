@@ -211,26 +211,25 @@ dummy_out_color_jax = torch_to_jax(dummy_out_color_torch)
 grad_out_color_jax = dummy_out_color_jax - color_jax
 
 jax_bwd_args = (
-    torch_to_jax(raster_settings.bg),
-    torch_to_jax(means3D), 
-    torch_to_jax(radii_torch), 
-    torch_to_jax(colors_precomp), 
-    torch_to_jax(scales), 
-    torch_to_jax(rotations), 
+    torch_to_jax(raster_settings.bg), #0
+    torch_to_jax(means3D), #1
+    torch_to_jax(radii_torch), #2 
+    torch_to_jax(colors_precomp), #3 
+    torch_to_jax(scales), #4
+    torch_to_jax(rotations), #5 
     # raster_settings.scale_modifier), 
-    torch_to_jax(cov3D_precomp), 
-    torch_to_jax(raster_settings.viewmatrix), 
-    torch_to_jax(raster_settings.projmatrix), 
-    grad_out_color_jax,
-    torch_to_jax(sh), 
-    torch_to_jax(raster_settings.campos),
-    geomBuffer_jax,
-    num_rendered_jax, 
-    binningBuffer_jax,
-    imgBuffer_jax
+    torch_to_jax(cov3D_precomp), #6 
+    torch_to_jax(raster_settings.viewmatrix), #7 
+    torch_to_jax(raster_settings.projmatrix), #8
+    grad_out_color_jax, #9
+    torch_to_jax(sh), #10
+    torch_to_jax(raster_settings.campos), #11
+    geomBuffer_jax, #12
+    jnp.array([[1,2,3]]),#num_rendered_jax, #13 
+    binningBuffer_jax, #14
+    imgBuffer_jax #15
 )
 for iter in range(1,3):
-    print("Jax bwd")
     jax_outs = rasterizer_bwd_jax.bind(
                 *jax_bwd_args,
                 tanfovx=tan_fovx, 
