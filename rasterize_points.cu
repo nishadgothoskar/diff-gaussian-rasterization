@@ -125,19 +125,12 @@ void RasterizeGaussiansCUDAJAX(
 	// std::function<char*(size_t)> binningFunc = resizeFunctional(binningBuffer);
 	// std::function<char*(size_t)> imgFunc = resizeFunctional(imgBuffer);
 
-	// GEOM_BUFFER_SIZE = int(1e6)
-	// BINNING_BUFFER_SIZE = int(1e7)
-	// IMG_BUFFER_SIZE = int(1e6)
-	
-    cudaMemset(geomBuffer, 0, 1e6*sizeof(char));
-    cudaMemset(binningBuffer, 0, 1e7*sizeof(char));
-    cudaMemset(imgBuffer, 0, 1e6*sizeof(char));
-
 	std::function<char*(size_t)> geomFunc = resizeFunctionalDummy(geomBuffer);
 	std::function<char*(size_t)> binningFunc = resizeFunctionalDummy(binningBuffer);
 	std::function<char*(size_t)> imgFunc = resizeFunctionalDummy(imgBuffer);
 
 	int rendered = 0;
+	cudaStreamSynchronize(stream);
 	if(P != 0)
 	{
 		int M = 0;
@@ -173,6 +166,7 @@ void RasterizeGaussiansCUDAJAX(
 		
 	}
 	cudaMemcpy(out_num_rendered, &rendered, sizeof(int), cudaMemcpyDefault);
+	cudaStreamSynchronize(stream);
 }
 
 std::tuple<int, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
@@ -285,6 +279,7 @@ void RasterizeGaussiansBackwardCUDAJAX(
 	// const torch::Tensor& binningBuffer,
 	// const torch::Tensor& imageBuffer,
 	// const bool debug
+	cudaStreamSynchronize(stream);
 	printf("start\n");
     const BwdDescriptor &descriptor = 
         *UnpackDescriptor<BwdDescriptor>(opaque, opaque_len);
@@ -375,6 +370,7 @@ void RasterizeGaussiansBackwardCUDAJAX(
 		dL_drotations,
 		debug);
 	}
+	cudaStreamSynchronize(stream);
 
 }
 
@@ -414,15 +410,15 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Te
 	M = sh.size(1);
   }
 
+  torch::Tensor dL_dmeans3D = torch::zeros({P, 3}, means3D.options());
   torch::Tensor dL_dmeans2D = torch::zeros({P, 3}, means3D.options());
   torch::Tensor dL_dcolors = torch::zeros({P, NUM_CHANNELS}, means3D.options());
+  torch::Tensor dL_dconic = torch::zeros({P, 2, 2}, means3D.options());
   torch::Tensor dL_dopacity = torch::zeros({P, 1}, means3D.options());
-  torch::Tensor dL_dmeans3D = torch::zeros({P, 3}, means3D.options());
   torch::Tensor dL_dcov3D = torch::zeros({P, 6}, means3D.options());
   torch::Tensor dL_dsh = torch::zeros({P, M, 3}, means3D.options());
   torch::Tensor dL_dscales = torch::zeros({P, 3}, means3D.options());
   torch::Tensor dL_drotations = torch::zeros({P, 4}, means3D.options());
-  torch::Tensor dL_dconic = torch::zeros({P, 2, 2}, means3D.options());
   
   if(P != 0)
   {  
@@ -442,9 +438,9 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Te
 	  tan_fovx,
 	  tan_fovy,
 	  radii.contiguous().data<int>(),
-	  static_cast<char*>(geomBuffer.contiguous().data_ptr()),
-	  static_cast<char*>(binningBuffer.contiguous().data_ptr()),
-	  static_cast<char*>(imageBuffer.contiguous().data_ptr()),
+	  reinterpret_cast<char*>(geomBuffer.contiguous().data_ptr()),
+	  reinterpret_cast<char*>(binningBuffer.contiguous().data_ptr()),
+	  reinterpret_cast<char*>(imageBuffer.contiguous().data_ptr()),
 	  dL_dout_color.contiguous().data<float>(),
 	  dL_dmeans2D.contiguous().data<float>(),
 	  dL_dconic.contiguous().data<float>(),  
