@@ -128,7 +128,7 @@ def _build_rasterize_gaussians_fwd_primitive():
         operands_ctx = ctx.avals_in[:len(operands)]
 
         output_shapes = [
-            (1,), (image_height, image_width, 3), (num_gaussians,), (GEOM_BUFFER_SIZE,), (BINNING_BUFFER_SIZE,), (IMG_BUFFER_SIZE,)
+            (1,), (3, image_height, image_width), (num_gaussians,), (GEOM_BUFFER_SIZE,), (BINNING_BUFFER_SIZE,), (IMG_BUFFER_SIZE,)
         ]
 
         result_types = [
@@ -254,7 +254,8 @@ def _build_rasterize_gaussians_bwd_primitive():
         float_to_ir = mlir.dtype_to_ir_type(np.dtype(np.float32))
 
         num_gaussians = ctx.avals_in[1].shape[0]  
-        image_height, image_width = ctx.avals_in[9].shape[:2]  
+        image_height, image_width = ctx.avals_in[9].shape[1:3]
+        print("JAX dimensions ", (image_height, image_width))  
         opaque = _C.build_gaussian_rasterize_bwd_descriptor(
             image_height, image_width, sh_degree, num_gaussians, tanfovx, tanfovy,   
         )

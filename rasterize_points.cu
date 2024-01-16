@@ -36,7 +36,6 @@ std::function<char*(size_t N)> resizeFunctional(torch::Tensor& t) {
 std::function<char*(size_t N)> resizeFunctionalDummy(auto& t) {
     auto lambda = [&t](size_t N) {
         // t.resize_({(long long)N});
-		// return static_cast<char*>(t);
 		return reinterpret_cast<char*>(t);
     };
     return lambda;
@@ -292,10 +291,18 @@ void RasterizeGaussiansBackwardCUDAJAX(
 	const float* sh = reinterpret_cast<const float*> (buffers[10]);
 	const int degree = descriptor.degree;
 	const float* campos = reinterpret_cast<const float*> (buffers[11]);
-	char* geomBuffer = static_cast<char*> (buffers[12]); // &((static_cast<char*> (buffers[12]))[0]);
-	const int* _R = static_cast<int*> (buffers[13]);
-	char* binningBuffer = static_cast<char*> (buffers[14]); // &((static_cast<char*> (buffers[14]))[0]); // reinterpret_cast<char*> (&buffers[14]);
-	char* imageBuffer = static_cast<char*> (buffers[15]); // &((static_cast<char*> (buffers[15]))[0]); // static_cast<char*> (buffers[15]);
+	char* geomBuffer = reinterpret_cast<char*> (buffers[12]); // &((reinterpret_cast<char*> (buffers[12]))[0]);
+	const int* _R = reinterpret_cast<int*> (buffers[13]);
+	char* binningBuffer = reinterpret_cast<char*> (buffers[14]); // &((reinterpret_cast<char*> (buffers[14]))[0]); // reinterpret_cast<char*> (&buffers[14]);
+	char* imageBuffer = static_cast<char*> (buffers[15]); // &((reinterpret_cast<char*> (buffers[15]))[0]); // static_cast<char*> (buffers[15]);
+	
+	// char imageBuffer2[100];
+	// cudaMemcpy(imageBuffer2, imageBuffer, 100*sizeof(char), cudaMemcpyDefault);
+	// for(int i = 0; i < 100; i++)
+	// {
+	// 	printf("rasterize_points.cu buffers[%d] = %u\n", i, (unsigned int) *((unsigned char *)&imageBuffer2[i]));
+	// }
+
 	const bool debug = false;
 	printf("start3\n");
 	
@@ -417,7 +424,6 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Te
   torch::Tensor dL_dsh = torch::zeros({P, M, 3}, means3D.options());
   torch::Tensor dL_dscales = torch::zeros({P, 3}, means3D.options());
   torch::Tensor dL_drotations = torch::zeros({P, 4}, means3D.options());
-  torch::Tensor dL_dconic = torch::zeros({P, 2, 2}, means3D.options());
 
   
   if(P != 0)
