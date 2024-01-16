@@ -53,7 +53,21 @@ class Intrinsics(NamedTuple):
     far: float
 
 def torch_to_jax(torch_array):
-    return jnp.array(torch_array.detach().cpu().numpy())
+    # shp = torch_array.shape
+    # return jnp.zeros(shp)
+
+    # td = torch.utils.dlpack.to_dlpack(torch_array.detach().clone())
+    # return jax.dlpack.from_dlpack(td)
+
+    n = torch_array.detach().clone().cpu().numpy()
+    with open('temp.npy', 'wb') as f:
+        np.save(f, n)
+    with open('temp.npy', 'rb') as f:
+        n = jnp.asarray(np.load(f))
+    return n
+
+# return jnp.array(torch_array.detach().clone().cpu().numpy())
+
 
 default_seed = 1222
 gt_seed = 1201223
@@ -94,6 +108,10 @@ camera_pose_jax = jnp.eye(4)
 proj_matrix = getProjectionMatrix(0.01, 100.0, fovX, fovY).transpose(0,1).cuda()
 view_matrix = torch.transpose(torch.tensor(np.array(jnp.linalg.inv(camera_pose_jax))),0,1).cuda()
 projmatrix = view_matrix @ proj_matrix
+
+view_matrix_jax = jax.lax.transpose(jnp.array(jnp.linalg.inv(camera_pose_jax)),(1,0))
+_projmatrix_jax = jax.lax.transpose(jnp.array(getProjectionMatrix(0.01, 100.0, fovX, fovY)), (1,0))
+projmatrix_jax = view_matrix_jax @ _projmatrix_jax
 
 ##############################
 # Torch
@@ -187,10 +205,10 @@ jax_fwd_args = (torch_to_jax(raster_settings.bg),
             torch_to_jax(opacity),
             torch_to_jax(scales),
             torch_to_jax(rotations),
-            torch_to_jax(cov3D_precomp),
-            torch_to_jax(view_matrix),
-            torch_to_jax(projmatrix),
-            torch_to_jax(sh),
+            jnp.array([]), #torch_to_jax(cov3D_precomp),
+            view_matrix_jax,
+            projmatrix_jax,
+            jnp.array([]), # torch_to_jax(sh),
             torch_to_jax(raster_settings.campos)
         )
 for iter in range(1,3):
@@ -204,8 +222,8 @@ for iter in range(1,3):
     )  
 num_rendered_jax, color_jax, radii_jax, geomBuffer_jax, binningBuffer_jax, imgBuffer_jax = jax_outs
 
-
 ## Backward
+print("\n\njax bwd")
 rasterizer_bwd_jax = _build_rasterize_gaussians_bwd_primitive()
 dummy_out_color_jax = torch_to_jax(dummy_out_color_torch)
 grad_out_color_jax = dummy_out_color_jax - color_jax
@@ -218,28 +236,26 @@ jax_bwd_args = (
     torch_to_jax(scales), #4
     torch_to_jax(rotations), #5 
     # raster_settings.scale_modifier), 
-    torch_to_jax(cov3D_precomp), #6 
-    torch_to_jax(raster_settings.viewmatrix), #7 
-    torch_to_jax(raster_settings.projmatrix), #8
+    jnp.array([]), #torch_to_jax(cov3D_precomp), #6 
+    view_matrix_jax, #7 
+    projmatrix_jax, #8
     grad_out_color_jax, #9
-    torch_to_jax(sh), #10
+    jnp.array([]), #torch_to_jax(sh), #10
     torch_to_jax(raster_settings.campos), #11
-    geomBuffer_jax, #12
-    jnp.array([[1,2,3]]),#num_rendered_jax, #13 
-    binningBuffer_jax, #14
-    imgBuffer_jax #15
+    jnp.array(geomBuffer_jax), #12
+    jnp.array(num_rendered_jax), #13 
+    jnp.array(binningBuffer_jax), #14
+    jnp.array(imgBuffer_jax) #15
 )
-for iter in range(1,3):
+for iter in range(1,):
     jax_outs = rasterizer_bwd_jax.bind(
                 *jax_bwd_args,
                 tanfovx=tan_fovx, 
                 tanfovy=tan_fovy, 
                 sh_degree=0
     )  
-grad_means2D_jax, grad_colors_precomp_jax, grad_opacities_jax, grad_means3D_jax, grad_cov3Ds_precomp_jax, grad_sh_jax, grad_scales_jax, grad_rotations_jax = jax_outs
-
-
-
+grad_means2D_jax, grad_colors_precomp_jax, grad_opacities_jax, grad_means3D_jax, grad_cov3Ds_precomp_jax, grad_sh_jax, grad_scales_jax, grad_rotations_jax, _ = jax_outs
+from IPython import embed; embed()
 
 print(f"grad_means2D PASS: {jnp.isclose(torch_to_jax(grad_means2D_torch), grad_means2D_jax).all()}")
 print(f"grad_colors_precomp PASS: {jnp.isclose(torch_to_jax(grad_colors_precomp_torch), grad_colors_precomp_jax).all()}")

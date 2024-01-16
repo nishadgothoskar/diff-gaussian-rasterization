@@ -460,6 +460,7 @@ renderCUDA(
 	const float ddelx_dx = 0.5 * W;
 	const float ddely_dy = 0.5 * H;
 
+	printf("PRIOR TO BIG LOOP: rounds=%d, range.x=%d, range.y=%d\n", rounds, range.x, range.y);
 	// Traverse all Gaussians
 	for (int i = 0; i < rounds; i++, toDo -= BLOCK_SIZE)
 	{
@@ -478,9 +479,13 @@ renderCUDA(
 		}
 		block.sync();
 
+		printf("BIG LOOP: GAUSSIAN %d\n", i);
+
 		// Iterate over Gaussians
 		for (int j = 0; !done && j < min(BLOCK_SIZE, toDo); j++)
 		{
+			printf("SMALL LOOP: GAUSSIAN %d\n", j);
+
 			// Keep track of current Gaussian ID. Skip, if this one
 			// is behind the last contributor for this pixel.
 			contributor--;
@@ -552,6 +557,13 @@ renderCUDA(
 
 			// Update gradients w.r.t. opacity of the Gaussian
 			atomicAdd(&(dL_dopacity[global_id]), G * dL_dalpha);
+
+
+			printf("Gaussian id j=%d", j);
+			printf("IN Backward.cu global_id=%d\n", global_id);
+			printf("IN Backward.cu dL_dmean2D[global_id].x=%f\n", dL_dmean2D[global_id].x);
+			printf("IN Backward.cu dL_dmean2D[global_id].y=%f\n", dL_dmean2D[global_id].y);
+			printf("\n\n");
 		}
 	}
 }

@@ -160,8 +160,7 @@ num_rendered_jax, color_jax, radii_jax, geomBuffer_jax, binningBuffer_jax, imgBu
             image_width=int(intrinsics.width),  
             sh_degree=0
 )  
-
-assert num_rendered_torch == int(num_rendered_jax[0])
+assert num_rendered_torch == int(num_rendered_jax[0]), f"{num_rendered_torch} != {num_rendered_jax[0]}"
 assert jnp.allclose(torch_to_jax(color_torch), color_jax)
 assert jnp.allclose(torch_to_jax(radii_torch), radii_jax)
 assert jnp.allclose(torch_to_jax(geomBuffer_torch), geomBuffer_jax[:geomBuffer_torch.shape[0]])
@@ -253,7 +252,7 @@ jax_bwd_args = (
     torch_to_jax(sh), #10
     torch_to_jax(raster_settings.campos), #11
     geomBuffer_jax, #12
-    jnp.array([[1,2,3]]),#num_rendered_jax, #13 
+    num_rendered_jax, #13 
     binningBuffer_jax, #14
     imgBuffer_jax #15
 )
@@ -270,5 +269,5 @@ jax_bwd_args = (
             sh_degree=0
 )  
 
-
+print("DONE!!")
 from IPython import embed; embed()

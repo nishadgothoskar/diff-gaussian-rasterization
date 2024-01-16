@@ -27,6 +27,9 @@ struct FwdDescriptor {
     int P;
     float tan_fovx;
     float tan_fovy;
+  	int geombuffer_sz;
+  	int binningbuffer_sz;
+  	int imgbuffer_sz;
 	// TODO scale_modifier
 };
 

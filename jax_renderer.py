@@ -35,6 +35,8 @@ for _name, _value in _C.registrations().items():
 # XLA array layout in memory
 def default_layouts(*shapes):
     return [range(len(shape) - 1, -1, -1) for shape in shapes]
+# def default_layouts(*shapes):
+#     return [range(len(shape)) for shape in shapes]
     
 
 ################################
@@ -67,8 +69,11 @@ def _build_rasterize_gaussians_fwd_primitive():
 
         num_gaussians, _ = means3D.shape
 
-        GEOM_BUFFER_SIZE = int(1e6)
-        BINNING_BUFFER_SIZE = int(1e7)
+        # GEOM_BUFFER_SIZE = int(1e6)
+        # BINNING_BUFFER_SIZE = int(1e7)
+        # IMG_BUFFER_SIZE = int(1e6)
+        GEOM_BUFFER_SIZE = int(1e5)
+        BINNING_BUFFER_SIZE = int(1e6)
         IMG_BUFFER_SIZE = int(1e6)
 
         return [ShapedArray((1,), int_dtype),
@@ -101,9 +106,18 @@ def _build_rasterize_gaussians_fwd_primitive():
         int_to_ir = mlir.dtype_to_ir_type(np.dtype(np.int32))
         byte_to_ir = mlir.dtype_to_ir_type(np.dtype(np.uint8))
 
+        # GEOM_BUFFER_SIZE = int(1e6)
+        # BINNING_BUFFER_SIZE = int(1e7)
+        # IMG_BUFFER_SIZE = int(1e6)
+
+        GEOM_BUFFER_SIZE = int(1e5)
+        BINNING_BUFFER_SIZE = int(1e6)
+        IMG_BUFFER_SIZE = int(1e6)
+
         num_gaussians = ctx.avals_in[1].shape[0]    
         opaque = _C.build_gaussian_rasterize_fwd_descriptor(
-            image_height, image_width, sh_degree, num_gaussians, tanfovx, tanfovy,   
+            image_height, image_width, sh_degree, num_gaussians, tanfovx, tanfovy, 
+            GEOM_BUFFER_SIZE, BINNING_BUFFER_SIZE, IMG_BUFFER_SIZE   
         )
 
         op_name = "rasterize_gaussians_fwd"
@@ -113,9 +127,6 @@ def _build_rasterize_gaussians_fwd_primitive():
 
         operands_ctx = ctx.avals_in[:len(operands)]
 
-        GEOM_BUFFER_SIZE = int(1e6)
-        BINNING_BUFFER_SIZE = int(1e7)
-        IMG_BUFFER_SIZE = int(1e6)
         output_shapes = [
             (1,), (image_height, image_width, 3), (num_gaussians,), (GEOM_BUFFER_SIZE,), (BINNING_BUFFER_SIZE,), (IMG_BUFFER_SIZE,)
         ]
