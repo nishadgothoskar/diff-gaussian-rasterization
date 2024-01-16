@@ -238,42 +238,8 @@ for iter in range(1,3):
     )  
 grad_means2D_jax, grad_colors_precomp_jax, grad_opacities_jax, grad_means3D_jax, grad_cov3Ds_precomp_jax, grad_sh_jax, grad_scales_jax, grad_rotations_jax = jax_outs
 
-# ########################
-# # Compare values
-# ########################
-
-print("-------------------------\nTESTING FORWARD\n-------------------------")
-
-# (1) num_rendered
-print("\n")
-print(f"Torch num_rendered = {num_rendered_torch}; Jax num_rendered = {num_rendered_jax}")
-print(f"Num_rendered PASS: {num_rendered_torch == num_rendered_jax[0]}") 
 
 
-# (2) color, radii
-print("\n")
-print(f"color PASS: {jnp.isclose(torch_to_jax(color_torch), color_jax).all()}")
-print(f"radii PASS: {jnp.isclose(torch_to_jax(radii_torch), radii_jax).all()}")
-
-
-# (3) buffers (TODO these are clearly wrong currently)
-print("\n")
-print(f"geomBuffer torch: sum {geomBuffer_torch.sum().item()}, min {geomBuffer_torch.min().item()}, max {geomBuffer_torch.max().item()}")
-print(f"geomBuffer jax: sum {geomBuffer_jax.sum().item()}, min {geomBuffer_jax.min().item()}, max {geomBuffer_jax.max().item()}")
-print(f"geomBuffer PASS: {jnp.isclose(torch_to_jax(geomBuffer_torch), geomBuffer_jax[:geomBuffer_torch.shape[0]]).all()}")
-
-print()
-print(f"binningBuffer torch: sum {binningBuffer_torch.sum().item()}, min {binningBuffer_torch.min().item()}, max {binningBuffer_torch.max().item()}")
-print(f"binningBuffer jax: sum {binningBuffer_jax.sum().item()}, min {binningBuffer_jax.min().item()}, max {binningBuffer_jax.max().item()}")
-print(f"binningBuffer PASS: {jnp.isclose(torch_to_jax(binningBuffer_torch), binningBuffer_jax[:binningBuffer_torch.shape[0]]).all()}")
-
-print()
-print(f"imgBuffer torch: sum {imgBuffer_torch.sum().item()}, min {imgBuffer_torch.min().item()}, max {imgBuffer_torch.max().item()}")
-print(f"imgBuffer jax: sum {imgBuffer_jax.sum().item()}, min {imgBuffer_jax.min().item()}, max {imgBuffer_jax.max().item()}")
-print(f"imgBuffer PASS: {jnp.isclose(torch_to_jax(imgBuffer_torch), imgBuffer_jax[:imgBuffer_torch.shape[0]]).all()}")
-
-
-print("-------------------------\nTESTING BACKWARD\n-------------------------")
 
 print(f"grad_means2D PASS: {jnp.isclose(torch_to_jax(grad_means2D_torch), grad_means2D_jax).all()}")
 print(f"grad_colors_precomp PASS: {jnp.isclose(torch_to_jax(grad_colors_precomp_torch), grad_colors_precomp_jax).all()}")

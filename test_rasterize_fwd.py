@@ -2,7 +2,7 @@
 import diff_gaussian_rasterization as dgr
 from diff_gaussian_rasterization import GaussianRasterizationSettings, GaussianRasterizer
 from diff_gaussian_rasterization import _C as torch_backend
-from jax_renderer import _build_rasterize_gaussians_fwd_primitive
+from jax_renderer import _build_rasterize_gaussians_fwd_primitive, _build_rasterize_gaussians_bwd_primitive
 
 import jax
 import jax.numpy as jnp
@@ -136,16 +136,8 @@ torch_args = (
     raster_settings.prefiltered,
     raster_settings.debug
 )
-start = time()
-torch_outs = torch_backend.rasterize_gaussians(*torch_args)
-end = time() 
+num_rendered_torch, color_torch, radii_torch, geomBuffer_torch, binningBuffer_torch, imgBuffer_torch = torch_backend.rasterize_gaussians(*torch_args)
 
-print(f"Elapsed time = {end - start} s")
-
-##############################
-# Jax
-##############################
-print("==========JAX==========")
 
 rasterizer_fwd_jax = _build_rasterize_gaussians_fwd_primitive()
 jax_args = (torch_to_jax(means3D),
@@ -157,58 +149,126 @@ jax_args = (torch_to_jax(means3D),
             torch_to_jax(view_matrix),
             torch_to_jax(projmatrix),
             torch_to_jax(sh))
-for iter in range(1,3):
-    start = time()
-    jax_outs = rasterizer_fwd_jax.bind(
-                jnp.zeros(3), # bg
-                *jax_args,
-                jnp.zeros(3), # campos
-                tanfovx=tan_fovx, 
-                tanfovy=tan_fovy, 
-                image_height=int(intrinsics.height), 
-                image_width=int(intrinsics.width),  
-                sh_degree=0
-    )  
-    end = time() 
-    print(f"Elapsed time (iter {iter})= {end - start} s")
+
+num_rendered_jax, color_jax, radii_jax, geomBuffer_jax, binningBuffer_jax, imgBuffer_jax = rasterizer_fwd_jax.bind(
+            jnp.zeros(3), # bg
+            *jax_args,
+            jnp.zeros(3), # campos
+            tanfovx=tan_fovx, 
+            tanfovy=tan_fovy, 
+            image_height=int(intrinsics.height), 
+            image_width=int(intrinsics.width),  
+            sh_degree=0
+)  
+
+assert num_rendered_torch == int(num_rendered_jax[0])
+assert jnp.allclose(torch_to_jax(color_torch), color_jax)
+assert jnp.allclose(torch_to_jax(radii_torch), radii_jax)
+assert jnp.allclose(torch_to_jax(geomBuffer_torch), geomBuffer_jax[:geomBuffer_torch.shape[0]])
+assert jnp.allclose(torch_to_jax(binningBuffer_torch), binningBuffer_jax[:binningBuffer_torch.shape[0]])
+assert jnp.allclose(torch_to_jax(imgBuffer_torch), imgBuffer_jax[:imgBuffer_torch.shape[0]])
 
 
-########################
-# Compare values
-########################
-num_rendered_torch, color_torch, radii_torch, geomBuffer_torch, binningBuffer_torch, imgBuffer_torch = torch_outs
-
-num_rendered_jax, color_jax, radii_jax, geomBuffer_jax, binningBuffer_jax, imgBuffer_jax = jax_outs
-
-# (1) num_rendered
-print("\n")
-print(f"Torch num_rendered = {num_rendered_torch}; Jax num_rendered = {num_rendered_jax}")
-print(f"Num_rendered PASS: {num_rendered_torch == num_rendered_jax[0]}") 
+binningBuffer_torch_to_jax = torch_to_jax(binningBuffer_torch) 
+mismatches = (binningBuffer_torch_to_jax != binningBuffer_jax[:binningBuffer_torch.shape[0]])
+print(mismatches.sum())
 
 
-# (2) color, radii
-print("\n")
-print(f"color PASS: {jnp.isclose(torch_to_jax(color_torch), color_jax).all()}")
-print(f"radii PASS: {jnp.isclose(torch_to_jax(radii_torch), radii_jax).all()}")
+torch_convert = torch_to_jax(imgBuffer_torch) 
+mismatches = (torch_convert != imgBuffer_jax[:imgBuffer_torch.shape[0]])
+print(mismatches.sum())
+print(jnp.where(mismatches))
+print(imgBuffer_torch.shape)
 
 
-# (3) buffers (TODO these are clearly wrong currently)
-print("\n")
-print(f"geomBuffer torch: sum {geomBuffer_torch.sum().item()}, min {geomBuffer_torch.min().item()}, max {geomBuffer_torch.max().item()}")
-print(f"geomBuffer jax: sum {geomBuffer_jax.sum().item()}, min {geomBuffer_jax.min().item()}, max {geomBuffer_jax.max().item()}")
-print(f"geomBuffer PASS: {jnp.isclose(torch_to_jax(geomBuffer_torch), geomBuffer_jax[:geomBuffer_torch.shape[0]]).all()}")
-
-print()
-print(f"binningBuffer torch: sum {binningBuffer_torch.sum().item()}, min {binningBuffer_torch.min().item()}, max {binningBuffer_torch.max().item()}")
-print(f"binningBuffer jax: sum {binningBuffer_jax.sum().item()}, min {binningBuffer_jax.min().item()}, max {binningBuffer_jax.max().item()}")
-print(f"binningBuffer PASS: {jnp.isclose(torch_to_jax(binningBuffer_torch), binningBuffer_jax[:binningBuffer_torch.shape[0]]).all()}")
-
-print()
-print(f"imgBuffer torch: sum {imgBuffer_torch.sum().item()}, min {imgBuffer_torch.min().item()}, max {imgBuffer_torch.max().item()}")
-print(f"imgBuffer jax: sum {imgBuffer_jax.sum().item()}, min {imgBuffer_jax.min().item()}, max {imgBuffer_jax.max().item()}")
-print(f"imgBuffer PASS: {jnp.isclose(torch_to_jax(imgBuffer_torch), imgBuffer_jax[:imgBuffer_torch.shape[0]]).all()}")
 
 
+
+
+
+dummy_out_color_torch = torch.tensor(torch.rand((3, int(intrinsics.height), int(intrinsics.width))), requires_grad=False, device=device).detach()
+grad_out_color_torch = dummy_out_color_torch - color_torch
+
+torch_bwd_args = (
+    raster_settings.bg,
+    means3D, 
+    radii_torch, 
+    colors_precomp, 
+    scales, 
+    rotations, 
+    raster_settings.scale_modifier, 
+    cov3D_precomp, 
+    raster_settings.viewmatrix, 
+    raster_settings.projmatrix, 
+    raster_settings.tanfovx, 
+    raster_settings.tanfovy, 
+    grad_out_color_torch, 
+    sh, 
+    raster_settings.sh_degree, 
+    raster_settings.campos,
+    geomBuffer_torch,
+    num_rendered_torch,
+    binningBuffer_torch,
+    imgBuffer_torch,
+    raster_settings.debug
+)
+
+(grad_means2D_torch,
+ grad_colors_precomp_torch,
+ grad_opacities_torch,
+ grad_means3D_torch,
+ grad_cov3Ds_precomp_torch,
+ grad_sh_torch,
+ grad_scales_torch, grad_rotations_torch) = torch_backend.rasterize_gaussians_backward(*torch_bwd_args)
+
+
+for i in (grad_means2D_torch,
+ grad_colors_precomp_torch,
+ grad_opacities_torch,
+ grad_means3D_torch,
+ grad_cov3Ds_precomp_torch,
+ grad_sh_torch,
+ grad_scales_torch, grad_rotations_torch):
+    print(i.shape)
+
+
+rasterizer_bwd_jax = _build_rasterize_gaussians_bwd_primitive()
+dummy_out_color_jax = torch_to_jax(dummy_out_color_torch)
+grad_out_color_jax = dummy_out_color_jax - color_jax
+
+assert jnp.allclose(torch_to_jax(grad_out_color_torch), grad_out_color_jax)
+
+jax_bwd_args = (
+    torch_to_jax(raster_settings.bg), #0
+    torch_to_jax(means3D), #1
+    torch_to_jax(radii_torch), #2 
+    torch_to_jax(colors_precomp), #3 
+    torch_to_jax(scales), #4
+    torch_to_jax(rotations), #5 
+    # raster_settings.scale_modifier), 
+    torch_to_jax(cov3D_precomp), #6 
+    torch_to_jax(raster_settings.viewmatrix), #7 
+    torch_to_jax(raster_settings.projmatrix), #8
+    grad_out_color_jax, #9
+    torch_to_jax(sh), #10
+    torch_to_jax(raster_settings.campos), #11
+    geomBuffer_jax, #12
+    jnp.array([[1,2,3]]),#num_rendered_jax, #13 
+    binningBuffer_jax, #14
+    imgBuffer_jax #15
+)
+(grad_means2D_jax,
+ grad_colors_precomp_jax,
+ grad_opacities_jax,
+ grad_means3D_jax,
+ grad_cov3Ds_precomp_jax,
+ grad_sh_jax,
+ grad_scales_jax, grad_rotations_jax, _) = rasterizer_bwd_jax.bind(
+            *jax_bwd_args,
+            tanfovx=tan_fovx, 
+            tanfovy=tan_fovy, 
+            sh_degree=0
+)  
 
 
 from IPython import embed; embed()
