@@ -289,18 +289,10 @@ void RasterizeGaussiansBackwardCUDAJAX(
 	const float* sh = reinterpret_cast<const float*> (buffers[10]);
 	const int degree = descriptor.degree;
 	const float* campos = reinterpret_cast<const float*> (buffers[11]);
-	char* geomBuffer = reinterpret_cast<char*> (buffers[12]); // &((reinterpret_cast<char*> (buffers[12]))[0]);
+	char* geomBuffer = reinterpret_cast<char*> (buffers[12]); 
 	const int* _R = reinterpret_cast<int*> (buffers[13]);
-	char* binningBuffer = reinterpret_cast<char*> (buffers[14]); // &((reinterpret_cast<char*> (buffers[14]))[0]); // reinterpret_cast<char*> (&buffers[14]);
-	char* imageBuffer = static_cast<char*> (buffers[15]); // &((reinterpret_cast<char*> (buffers[15]))[0]); // static_cast<char*> (buffers[15]);
-	
-	// char imageBuffer2[100];
-	// cudaMemcpy(imageBuffer2, imageBuffer, 100*sizeof(char), cudaMemcpyDefault);
-	// for(int i = 0; i < 100; i++)
-	// {
-	// 	printf("rasterize_points.cu buffers[%d] = %u\n", i, (unsigned int) *((unsigned char *)&imageBuffer2[i]));
-	// }
-
+	char* binningBuffer = reinterpret_cast<char*> (buffers[14]);  
+	char* imageBuffer = static_cast<char*> (buffers[15]);  
 	const bool debug = false;
 	
 	// outputs

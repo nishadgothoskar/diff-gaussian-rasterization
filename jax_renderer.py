@@ -24,6 +24,9 @@ from tqdm import tqdm
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+TEN_E_5 = int(1e5)
+TEN_E_6 = int(1e6)
+TEN_E_7 = int(1e7)
 ################################
 # Helpers and boilerplates
 ################################
@@ -35,9 +38,6 @@ for _name, _value in _C.registrations().items():
 # XLA array layout in memory
 def default_layouts(*shapes):
     return [range(len(shape) - 1, -1, -1) for shape in shapes]
-# def default_layouts(*shapes):
-#     return [range(len(shape)) for shape in shapes]
-    
 
 ################################
 # Rasterize fwd
@@ -69,12 +69,9 @@ def _build_rasterize_gaussians_fwd_primitive():
 
         num_gaussians, _ = means3D.shape
 
-        # GEOM_BUFFER_SIZE = int(1e6)
-        # BINNING_BUFFER_SIZE = int(1e7)
-        # IMG_BUFFER_SIZE = int(1e6)
-        GEOM_BUFFER_SIZE = int(1e5)
-        BINNING_BUFFER_SIZE = int(1e6)
-        IMG_BUFFER_SIZE = int(1e6)
+        GEOM_BUFFER_SIZE = TEN_E_6
+        BINNING_BUFFER_SIZE = TEN_E_6
+        IMG_BUFFER_SIZE = TEN_E_7
 
         return [ShapedArray((1,), int_dtype),
                 ShapedArray((3, image_height, image_width),  float_dtype),
@@ -106,13 +103,9 @@ def _build_rasterize_gaussians_fwd_primitive():
         int_to_ir = mlir.dtype_to_ir_type(np.dtype(np.int32))
         byte_to_ir = mlir.dtype_to_ir_type(np.dtype(np.uint8))
 
-        # GEOM_BUFFER_SIZE = int(1e6)
-        # BINNING_BUFFER_SIZE = int(1e7)
-        # IMG_BUFFER_SIZE = int(1e6)
-
-        GEOM_BUFFER_SIZE = int(1e5)
-        BINNING_BUFFER_SIZE = int(1e6)
-        IMG_BUFFER_SIZE = int(1e6)
+        GEOM_BUFFER_SIZE = TEN_E_6
+        BINNING_BUFFER_SIZE = TEN_E_6
+        IMG_BUFFER_SIZE = TEN_E_7
 
         num_gaussians = ctx.avals_in[1].shape[0]    
         opaque = _C.build_gaussian_rasterize_fwd_descriptor(

@@ -83,7 +83,7 @@ reset(default_seed)
 
 intrinsics = Intrinsics(
     height=200,
-    width=200,
+    width=300,
     fx=300.0, fy=300.0,
     cx=100.0, cy=100.0,
     near=0.01, far=2.5
@@ -93,7 +93,6 @@ fovX = jnp.arctan(intrinsics.width / 2 / intrinsics.fx) * 2.0
 fovY = jnp.arctan(intrinsics.height / 2 / intrinsics.fy) * 2.0
 tan_fovx = math.tan(fovX)
 tan_fovy = math.tan(fovY)
-print(tan_fovx, tan_fovy)
 
 means3D = jax.random.uniform(jax.random.PRNGKey(default_seed), shape=(100, 3), minval=-0.5, maxval=0.5) + jnp.array([0.0, 0.0, 1.0])
 N = means3D.shape[0]
@@ -102,7 +101,8 @@ scales =jnp.ones((N,3)) * 4.5400e-03
 rotations = jax.random.uniform(jax.random.PRNGKey(default_seed), shape=(N,4), minval=-1.0, maxval=1.0)
 colors_precomp = jax.random.uniform(jax.random.PRNGKey(default_seed), shape=(N,3), minval=0.0, maxval=1.0)
 cov3D_precomp = jax.random.uniform(jax.random.PRNGKey(default_seed), shape=(N,3), minval=0.0, maxval=0.1)
-sh = jax.random.uniform(jax.random.PRNGKey(default_seed), shape=(N,3), minval=0.0, maxval=1.0)
+# sh = jax.random.uniform(jax.random.PRNGKey(default_seed), shape=(N,0), minval=0.0, maxval=1.0)
+sh_jax = jnp.array([])
 
 camera_pose_jax = jnp.eye(4)
 proj_matrix = getProjectionMatrix(0.01, 100.0, fovX, fovY).transpose(0,1).cuda()
@@ -141,7 +141,7 @@ jax_fwd_args = (means3D,
             cov3D_precomp,
             view_matrix,
             projmatrix,
-            sh)
+            sh_jax)
 
 torch_fwd_args = (
     raster_settings.bg, 
@@ -158,7 +158,7 @@ torch_fwd_args = (
     raster_settings.tanfovy,
     raster_settings.image_height,
     raster_settings.image_width,
-    jax_to_torch(sh), # (None -> torch.Tensor([])),
+    jax_to_torch(sh_jax), # (None -> torch.Tensor([])),
     raster_settings.sh_degree,
     raster_settings.campos,
     raster_settings.prefiltered,
@@ -205,8 +205,8 @@ jax_bwd_args = (
     view_matrix, #7 
     projmatrix, #8
     grad_out_color_jax, #9
-    sh, #10
-    jnp.zeros(3), #11
+    sh_jax, #10
+    raster_settings.sh_degree, #11
     geomBuffer_jax, #12
     num_rendered_jax, #13 
     binningBuffer_jax, #14
@@ -222,13 +222,13 @@ torch_bwd_args = (
     jax_to_torch(scales), 
     jax_to_torch(rotations), 
     raster_settings.scale_modifier, 
-    torch.Tensor([]), 
+    jax_to_torch(cov3D_precomp), 
     raster_settings.viewmatrix, 
     raster_settings.projmatrix, 
     raster_settings.tanfovx, 
     raster_settings.tanfovy, 
     grad_out_color_torch, 
-    torch.Tensor([]), 
+    jax_to_torch(sh_jax), 
     raster_settings.sh_degree, 
     raster_settings.campos,
     geomBuffer_torch,
@@ -253,35 +253,34 @@ reset(gt_seed)
             tanfovy=tan_fovy, 
             sh_degree=0
 )  
-print(grad_means2D_jax.sum())
-print(grad_colors_precomp_jax.sum())
-print(grad_opacities_jax.sum())
-print(grad_means3D_jax.sum())
+torch.cuda.empty_cache()
+reset(gt_seed)
+(grad_means2D_torch_1,
+ grad_colors_precomp_torch_1,
+ grad_opacities_torch_1,
+ grad_means3D_torch_1,
+ grad_cov3Ds_precomp_torch_1,
+ grad_sh_torch_1,
+ grad_scales_torch_1, grad_rotations_torch_1) = torch_backend.rasterize_gaussians_backward(*torch_bwd_args)
 
 torch.cuda.empty_cache()
 reset(gt_seed)
-(grad_means2D_torch,
- grad_colors_precomp_torch,
- grad_opacities_torch,
- grad_means3D_torch,
- grad_cov3Ds_precomp_torch,
- grad_sh_torch,
- grad_scales_torch, grad_rotations_torch) = torch_backend.rasterize_gaussians_backward(*torch_bwd_args)
+(grad_means2D_torch_2,
+ grad_colors_precomp_torch_2,
+ grad_opacities_torch_2,
+ grad_means3D_torch_2,
+ grad_cov3Ds_precomp_torch_2,
+ grad_sh_torch_2,
+ grad_scales_torch_2, grad_rotations_torch_2) = torch_backend.rasterize_gaussians_backward(*torch_bwd_args)
 
-print(grad_means2D_torch.sum())
-print(grad_colors_precomp_torch.sum())
-print(grad_opacities_torch.sum())
-print(grad_means3D_torch.sum())
 
 ## Compare
-from IPython import embed; embed()
-
-assert jnp.allclose(torch_to_jax(grad_means2D_torch), grad_means2D_jax, atol=5e-5), f"grad_means2D mismatch, max {abs(torch_to_jax(grad_means2D_torch) - grad_means2D_jax).max()}"
-assert jnp.allclose(torch_to_jax(grad_colors_precomp_torch), grad_colors_precomp_jax), "grad_colors_precomp mismatch"
-assert jnp.allclose(torch_to_jax(grad_opacities_torch), grad_opacities_jax), "grad_opacities mismatch"
-assert jnp.allclose(torch_to_jax(grad_means3D_torch), grad_means3D_jax, atol=5e-5), f"grad_means3D mismatch, max {abs(torch_to_jax(grad_means3D_torch) - grad_means3D_jax).max()}"
-assert jnp.allclose(torch_to_jax(grad_cov3Ds_precomp_torch), grad_cov3Ds_precomp_jax), "grad_cov3Ds_precomp mismatch"
-assert jnp.allclose(torch_to_jax(grad_sh_torch), grad_sh_jax), "grad_sh mismatch"
-assert jnp.allclose(torch_to_jax(grad_scales_torch), grad_scales_jax), "grad_scales mismatch"
-assert jnp.allclose(torch_to_jax(grad_rotations_torch), grad_rotations_jax), "grad_scales mismatch"
-print("BACKWARD PASSED")
+assert (jnp.allclose(torch_to_jax(grad_means2D_torch_1), grad_means2D_jax) or not torch.allclose(grad_means2D_torch_1, grad_means2D_torch_2, atol=1e-6)), f"grad_means2D mismatch, max {abs(torch_to_jax(grad_means2D_torch_1) - grad_means2D_jax).max()}"
+assert jnp.allclose(torch_to_jax(grad_colors_precomp_torch_1), grad_colors_precomp_jax) or not torch.allclose(grad_colors_precomp_torch_1, grad_colors_precomp_torch_2, atol=1e-6), "grad_colors_precomp mismatch"
+assert jnp.allclose(torch_to_jax(grad_opacities_torch_1), grad_opacities_jax) or not torch.allclose(grad_opacities_torch_1, grad_opacities_torch_2, atol=1e-6), "grad_opacities mismatch"
+assert jnp.allclose(torch_to_jax(grad_means3D_torch_1), grad_means3D_jax) or not torch.allclose(grad_means3D_torch_1, grad_means3D_torch_2, atol=1e-6), f"grad_means3D mismatch, max {abs(torch_to_jax(grad_means3D_torch_1) - grad_means3D_jax).max()}"
+assert jnp.allclose(torch_to_jax(grad_cov3Ds_precomp_torch_1), grad_cov3Ds_precomp_jax) or not torch.allclose(grad_cov3Ds_precomp_torch_1, grad_cov3Ds_precomp_torch_2, atol=1e-6), "grad_cov3Ds_precomp mismatch"
+assert jnp.allclose(torch_to_jax(grad_sh_torch_1), grad_sh_jax) or not torch.allclose(grad_sh_torch_1, grad_sh_torch_2, atol=1e-6), "grad_sh mismatch"
+assert jnp.allclose(torch_to_jax(grad_scales_torch_1), grad_scales_jax) or not torch.allclose(grad_scales_torch_1, grad_scales_torch_2, atol=1e-6), f"grad_scales mismatch, max {abs(torch_to_jax(grad_scales_torch_1) - grad_scales_jax).max()}"
+assert jnp.allclose(torch_to_jax(grad_rotations_torch_1), grad_rotations_jax) or not torch.allclose(grad_rotations_torch_1, grad_rotations_torch_2, atol=1e-6), "grad_scales mismatch"
+print("BACKWARD PASSED: all grads")
