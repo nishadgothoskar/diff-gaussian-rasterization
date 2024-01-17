@@ -24,12 +24,13 @@ from tqdm import tqdm
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-TEN_E_5 = int(1e5)
-TEN_E_6 = int(1e6)
-TEN_E_7 = int(1e7)
 ################################
 # Helpers and boilerplates
 ################################
+
+TEN_E_5 = int(1e5)
+TEN_E_6 = int(1e6)
+TEN_E_7 = int(1e7)
 
 for _name, _value in _C.registrations().items():
     print(_name)
@@ -108,7 +109,7 @@ def _build_rasterize_gaussians_fwd_primitive():
         IMG_BUFFER_SIZE = TEN_E_7
 
         num_gaussians = ctx.avals_in[1].shape[0]    
-        opaque = _C.build_gaussian_rasterize_fwd_descriptor(
+        opaque = _C.build_gaussian_rasterize_descriptor(
             image_height, image_width, sh_degree, num_gaussians, tanfovx, tanfovy, 
             GEOM_BUFFER_SIZE, BINNING_BUFFER_SIZE, IMG_BUFFER_SIZE   
         )
@@ -246,8 +247,10 @@ def _build_rasterize_gaussians_bwd_primitive():
 
         num_gaussians = ctx.avals_in[1].shape[0]  
         image_height, image_width = ctx.avals_in[9].shape[1:3]
-        opaque = _C.build_gaussian_rasterize_bwd_descriptor(
+
+        opaque = _C.build_gaussian_rasterize_descriptor(
             image_height, image_width, sh_degree, num_gaussians, tanfovx, tanfovy,   
+            -1, -1, -1   # buffer sizes are irrelevant for bwd  
         )
 
         op_name = "rasterize_gaussians_bwd"

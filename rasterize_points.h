@@ -20,7 +20,7 @@
 //-------------------------------------------------------------------------
 // Descriptors.
 
-struct FwdDescriptor {
+struct RasterizeDescriptor {
     int image_height;
     int image_width;
     int degree;
@@ -33,15 +33,6 @@ struct FwdDescriptor {
 	// TODO scale_modifier
 };
 
-struct BwdDescriptor {
-    int image_height;
-    int image_width;
-    int degree;
-    int P;
-    float tan_fovx;
-    float tan_fovy;
-	// TODO scale_modifier
-};
 
 
 //-------------------------------------------------------------------------

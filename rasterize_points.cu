@@ -49,30 +49,8 @@ void RasterizeGaussiansCUDAJAX(
 	const char *opaque, std::size_t opaque_len
 )
 {
-	// const torch::Tensor& background,
-	// const torch::Tensor& means3D,
-	// const torch::Tensor& colors,
-	// const torch::Tensor& opacity,
-	// const torch::Tensor& scales,
-	// const torch::Tensor& rotations,
-	// const float scale_modifier,
-	// const torch::Tensor& cov3D_precomp,
-	// const torch::Tensor& viewmatrix,
-	// const torch::Tensor& projmatrix,
-	// const float tan_fovx, 
-	// const float tan_fovy,
-	// const int image_height,
-	// const int image_width,
-	// const torch::Tensor& sh,
-	// const int degree,
-	// const torch::Tensor& campos,
-	// const bool prefiltered,
-	// const bool debug
-
-
-    const FwdDescriptor &descriptor = 
-        *UnpackDescriptor<FwdDescriptor>(opaque, opaque_len);
-	// image_height, image_width, degree, P
+    const RasterizeDescriptor &descriptor = 
+        *UnpackDescriptor<RasterizeDescriptor>(opaque, opaque_len);
 
 	// inputs.
     const float *background = reinterpret_cast<const float *> (buffers[0]);
@@ -105,28 +83,6 @@ void RasterizeGaussiansCUDAJAX(
     char *geomBuffer = reinterpret_cast<char *> (buffers[14]);
     char *binningBuffer = reinterpret_cast<char *> (buffers[15]);
     char *imgBuffer = reinterpret_cast<char *> (buffers[16]);
-
-
-	// if (means3D.ndimension() != 2 || means3D.size(1) != 3) {
-	// 	AT_ERROR("means3D must have dimensions (num_points, 3)");
-	// }
-
-
-	// torch::Tensor out_color = torch::full({NUM_CHANNELS, H, W}, 0.0, float_opts);
-	// torch::Tensor radii = torch::full({P}, 0, means3D.options().dtype(torch::kInt32));
-
-	// torch::Device device(torch::kCUDA);
-	// torch::TensorOptions options(torch::kByte);
-	// torch::Tensor geomBuffer = torch::empty({0}, options.device(device));
-	// torch::Tensor binningBuffer = torch::empty({0}, options.device(device));
-	// torch::Tensor imgBuffer = torch::empty({0}, options.device(device));
-	// std::function<char*(size_t)> geomFunc = resizeFunctional(geomBuffer);
-	// std::function<char*(size_t)> binningFunc = resizeFunctional(binningBuffer);
-	// std::function<char*(size_t)> imgFunc = resizeFunctional(imgBuffer);
-
-	// GEOM_BUFFER_SIZE = int(1e6)
-	// BINNING_BUFFER_SIZE = int(1e7)
-	// IMG_BUFFER_SIZE = int(1e6)
 	
     cudaMemset(geomBuffer, '\0', descriptor.geombuffer_sz*sizeof(char));
     cudaMemset(binningBuffer, '\0', descriptor.binningbuffer_sz*sizeof(char));
@@ -265,8 +221,8 @@ void RasterizeGaussiansBackwardCUDAJAX(
 	void **buffers,
 	const char *opaque, std::size_t opaque_len
 ){
-    const BwdDescriptor &descriptor = 
-        *UnpackDescriptor<BwdDescriptor>(opaque, opaque_len);
+    const RasterizeDescriptor &descriptor = 
+        *UnpackDescriptor<RasterizeDescriptor>(opaque, opaque_len);
 	// image_height, image_width, degree, P
 	const int P = descriptor.P;
 	const int H = descriptor.image_height; // dL_dout_color.size(1)

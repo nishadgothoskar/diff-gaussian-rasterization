@@ -32,9 +32,9 @@ pybind11::dict Registrations() {
   return dict;
 }
 
-auto BuildFwdDescriptor(int image_height, int image_width, int degree, int P, float tan_fovx, float tan_fovy, 
-                        int geombuffer_sz, int binningbuffer_sz, int imgbuffer_sz) {
-  FwdDescriptor d;
+auto BuildRasterizeDescriptor(int image_height, int image_width, int degree, int P, float tan_fovx, float tan_fovy, 
+                    int geombuffer_sz, int binningbuffer_sz, int imgbuffer_sz) {
+  RasterizeDescriptor d;
   d.image_height = image_height;
   d.image_width = image_width;
   d.degree = degree;
@@ -47,23 +47,10 @@ auto BuildFwdDescriptor(int image_height, int image_width, int degree, int P, fl
   return PackDescriptor(d);
 }
 
-auto BuildBwdDescriptor(int image_height, int image_width, int degree, int P, float tan_fovx, float tan_fovy) {
-  BwdDescriptor d;
-  d.image_height = image_height;
-  d.image_width = image_width;
-  d.degree = degree;
-  d.P = P;
-  d.tan_fovx = tan_fovx;
-  d.tan_fovy = tan_fovy;
-  return PackDescriptor(d);
-}
-
-
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.def("rasterize_gaussians", &RasterizeGaussiansCUDA);
   m.def("rasterize_gaussians_backward", &RasterizeGaussiansBackwardCUDA);
   m.def("mark_visible", &markVisible);
   m.def("registrations", &Registrations, "custom call registrations");
-  m.def("build_gaussian_rasterize_fwd_descriptor", &BuildFwdDescriptor);
-  m.def("build_gaussian_rasterize_bwd_descriptor", &BuildBwdDescriptor);
+  m.def("build_gaussian_rasterize_descriptor", &BuildRasterizeDescriptor);
 }
