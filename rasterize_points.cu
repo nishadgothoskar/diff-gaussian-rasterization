@@ -225,10 +225,10 @@ RasterizeGaussiansCUDA(
   if(P != 0)
   {
 	  int M = 0;
-	  if(sh.size(0) != 0)
-	  {
-		M = sh.size(1);
-      }
+	//   if(sh.size(0) != 0)
+	//   {
+	// 	M = sh.size(1);
+    //   }
 
 	  rendered = CudaRasterizer::Rasterizer::forward(
 	    geomFunc,
@@ -402,10 +402,10 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Te
   const int W = dL_dout_color.size(2);
   
   int M = 0;
-  if(sh.size(0) != 0)
-  {	
-	M = sh.size(1);
-  }
+//   if(sh.size(0) != 0)
+//   {	
+// 	M = sh.size(1);
+//   }
 
   torch::Tensor dL_dmeans3D = torch::zeros({P, 3}, means3D.options());
   torch::Tensor dL_dmeans2D = torch::zeros({P, 3}, means3D.options());
