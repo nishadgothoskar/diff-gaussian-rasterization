@@ -265,14 +265,12 @@ void RasterizeGaussiansBackwardCUDAJAX(
 	void **buffers,
 	const char *opaque, std::size_t opaque_len
 ){
-	printf("start\n");
     const BwdDescriptor &descriptor = 
         *UnpackDescriptor<BwdDescriptor>(opaque, opaque_len);
 	// image_height, image_width, degree, P
 	const int P = descriptor.P;
 	const int H = descriptor.image_height; // dL_dout_color.size(1)
 	const int W = descriptor.image_width; // dL_dout_color.size(2)
-	printf("start2\n");
 
 	// inputs
     const float* background = reinterpret_cast<const float*> (buffers[0]);
@@ -304,7 +302,6 @@ void RasterizeGaussiansBackwardCUDAJAX(
 	// }
 
 	const bool debug = false;
-	printf("start3\n");
 	
 	// outputs
 	float* dL_dmeans2D = reinterpret_cast<float*> (buffers[16]);
@@ -316,12 +313,9 @@ void RasterizeGaussiansBackwardCUDAJAX(
 	float* dL_dscales = reinterpret_cast<float*> (buffers[22]);
 	float* dL_drotations = reinterpret_cast<float*> (buffers[23]);
 	float* dL_dconic = reinterpret_cast<float*> (buffers[24]);
-	printf("start4\n");
 
 	int R;
 	cudaMemcpy(&R, _R, sizeof(int), cudaMemcpyDefault);
-	printf("Num gaussians %d\n", P);
-	printf("Num expanded gaussians %d\n", R);
 
 	int M = 0;
 
@@ -374,9 +368,7 @@ void RasterizeGaussiansBackwardCUDAJAX(
 		dL_drotations,
 		debug);
 	}
-	printf("Finished bwd, syncing stream...\n");
 	cudaStreamSynchronize(stream);
-	printf("Exiting bwd");
 }
 
 

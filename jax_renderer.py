@@ -209,12 +209,11 @@ def _build_rasterize_gaussians_bwd_primitive():
         float_dtype = dtypes.canonicalize_dtype(np.float32)
         int_dtype = dtypes.canonicalize_dtype(np.int32)
         byte_dtype = dtypes.canonicalize_dtype(np.uint8)
-        print("heelo")
+
         num_gaussians, _ = means3D.shape
         M = sh.shape[0]
         if M != 0:
             M = sh.shape[1]
-        print("heelo 2")
 
         return [ShapedArray((num_gaussians, 3), float_dtype),  # dL_dmeans2D
                 ShapedArray((num_gaussians, 3),  float_dtype), # dL_dcolors
@@ -250,12 +249,10 @@ def _build_rasterize_gaussians_bwd_primitive():
             sh_degree
     ):
 
-        print("heelo 4")
         float_to_ir = mlir.dtype_to_ir_type(np.dtype(np.float32))
 
         num_gaussians = ctx.avals_in[1].shape[0]  
         image_height, image_width = ctx.avals_in[9].shape[1:3]
-        print("JAX dimensions ", (image_height, image_width))  
         opaque = _C.build_gaussian_rasterize_bwd_descriptor(
             image_height, image_width, sh_degree, num_gaussians, tanfovx, tanfovy,   
         )
@@ -273,7 +270,6 @@ def _build_rasterize_gaussians_bwd_primitive():
         M = ctx.avals_in[10].shape[0]  # sh.shape[0]
         if M != 0:
             M = ctx.avals_in[10].shape[1]
-        print("heelo 6")
 
         output_shapes = [(num_gaussians, 3),  # dL_dmeans2D
                 (num_gaussians, 3), # dL_dcolors
@@ -287,7 +283,6 @@ def _build_rasterize_gaussians_bwd_primitive():
                 ]
 
         result_types = [mlir.ir.RankedTensorType.get(list(shp), float_to_ir) for shp in output_shapes]
-        print("heelo 7")
 
         return custom_call(
             op_name,

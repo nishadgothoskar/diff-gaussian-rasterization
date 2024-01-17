@@ -369,22 +369,22 @@ void CudaRasterizer::Rasterizer::backward(
 	float* dL_drot,
 	bool debug)
 {
-	char imageBuffer2[100];
-	cudaMemcpy(imageBuffer2, img_buffer, 100*sizeof(char), cudaMemcpyDefault);
-	for(int i = 0; i < 100; i++)
-	{
-		printf("rasterize_impl.cu buffers[%d] = %u\n", i, (unsigned int) *((unsigned char *)&imageBuffer2[i]));
-	}
+	// char imageBuffer2[100];
+	// cudaMemcpy(imageBuffer2, img_buffer, 100*sizeof(char), cudaMemcpyDefault);
+	// for(int i = 0; i < 100; i++)
+	// {
+	// 	printf("rasterize_impl.cu buffers[%d] = %u\n", i, (unsigned int) *((unsigned char *)&imageBuffer2[i]));
+	// }
 
-	printf("width height %d %d \n", width, height);
+	// printf("width height %d %d \n", width, height);
 	ImageState imgState = ImageState::fromChunk(img_buffer, width * height);
 
-	for(int i = 0; i < 100; i++)
-	{
-		uint2 ranges_buffer[1];
-		cudaMemcpy(ranges_buffer, &imgState.ranges[i], sizeof(uint2), cudaMemcpyDefault);
-		printf("rasterize_impl.cu imgState.ranges.x and y = %u %u\n", i, (unsigned)ranges_buffer[0].x, (unsigned)ranges_buffer[0].y);
-	}
+	// for(int i = 0; i < 100; i++)
+	// {
+	// 	uint2 ranges_buffer[1];
+	// 	cudaMemcpy(ranges_buffer, &imgState.ranges[i], sizeof(uint2), cudaMemcpyDefault);
+	// 	printf("rasterize_impl.cu imgState.ranges.x and y = %u %u\n", i, (unsigned)ranges_buffer[0].x, (unsigned)ranges_buffer[0].y);
+	// }
 
 
 	GeometryState geomState = GeometryState::fromChunk(geom_buffer, P);
