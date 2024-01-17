@@ -1,26 +1,13 @@
-import diff_gaussian_rasterization as dgr
-from diff_gaussian_rasterization import GaussianRasterizationSettings, GaussianRasterizer
-import torch
-import os
-import numpy as np
-import matplotlib.pyplot as plt
-import math
-from tqdm import tqdm
-import jax.numpy as jnp
-from random import randint
-import jax
-from jax.scipy.spatial.transform import Rotation as R
 from diff_gaussian_rasterization import _C
-import jax.numpy as jnp
-import jax
 import functools
+import jax
 from jax import core, dtypes
 from jax.core import ShapedArray
+from jaxlib.hlo_helpers import custom_call
 from jax.interpreters import batching, mlir, xla
 from jax.lib import xla_client
 import numpy as np
-from jaxlib.hlo_helpers import custom_call
-from tqdm import tqdm
+import torch
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -33,7 +20,6 @@ TEN_E_6 = int(1e6)
 TEN_E_7 = int(1e7)
 
 for _name, _value in _C.registrations().items():
-    print(_name)
     xla_client.register_custom_call_target(_name, _value, platform="gpu")
 
 # XLA array layout in memory
@@ -41,7 +27,7 @@ def default_layouts(*shapes):
     return [range(len(shape) - 1, -1, -1) for shape in shapes]
 
 ################################
-# Rasterize fwd
+# Rasterize fwd primitive
 ################################
 
 def _build_rasterize_gaussians_fwd_primitive():
@@ -170,9 +156,8 @@ def _build_rasterize_gaussians_fwd_primitive():
     return _rasterize_prim
 
 
-
 ################################
-# Rasterize fwd
+# Rasterize bwd primitive
 ################################
 
 def _build_rasterize_gaussians_bwd_primitive():

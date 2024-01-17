@@ -2,7 +2,7 @@
 import diff_gaussian_rasterization as dgr
 from diff_gaussian_rasterization import GaussianRasterizationSettings, GaussianRasterizer
 from diff_gaussian_rasterization import _C as torch_backend
-from jax_renderer import _build_rasterize_gaussians_fwd_primitive, _build_rasterize_gaussians_bwd_primitive
+from jax_renderer_primitives import _build_rasterize_gaussians_fwd_primitive, _build_rasterize_gaussians_bwd_primitive
 
 import jax
 import jax.numpy as jnp
@@ -73,8 +73,8 @@ def jax_to_torch(jnp_array):
 rasterizer_fwd_jax = _build_rasterize_gaussians_fwd_primitive()
 rasterizer_bwd_jax = _build_rasterize_gaussians_bwd_primitive()
 
-default_seed = 1222
-gt_seed = 1201223
+default_seed = 0
+gt_seed = 1
 
 #############################
 # Arguments
@@ -282,5 +282,5 @@ assert jnp.allclose(torch_to_jax(grad_means3D_torch_1), grad_means3D_jax) or not
 assert jnp.allclose(torch_to_jax(grad_cov3Ds_precomp_torch_1), grad_cov3Ds_precomp_jax) or not torch.allclose(grad_cov3Ds_precomp_torch_1, grad_cov3Ds_precomp_torch_2, atol=1e-6), "grad_cov3Ds_precomp mismatch"
 assert jnp.allclose(torch_to_jax(grad_sh_torch_1), grad_sh_jax) or not torch.allclose(grad_sh_torch_1, grad_sh_torch_2, atol=1e-6), "grad_sh mismatch"
 assert jnp.allclose(torch_to_jax(grad_scales_torch_1), grad_scales_jax) or not torch.allclose(grad_scales_torch_1, grad_scales_torch_2, atol=1e-6), f"grad_scales mismatch, max {abs(torch_to_jax(grad_scales_torch_1) - grad_scales_jax).max()}"
-assert jnp.allclose(torch_to_jax(grad_rotations_torch_1), grad_rotations_jax) or not torch.allclose(grad_rotations_torch_1, grad_rotations_torch_2, atol=1e-6), "grad_scales mismatch"
+assert jnp.allclose(torch_to_jax(grad_rotations_torch_1), grad_rotations_jax) or not torch.allclose(grad_rotations_torch_1, grad_rotations_torch_2, atol=1e-6), f"grad_scales mismatch, max {abs(torch_to_jax(grad_rotations_torch_1) - grad_rotations_jax).max()}"
 print("BACKWARD PASSED: all grads")
