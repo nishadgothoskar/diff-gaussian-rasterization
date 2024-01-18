@@ -212,7 +212,7 @@ def _build_rasterize_gaussians_bwd_primitive():
             binningBuffer,
             imgBuffer,
             tanfovx, 
-            tanfovy, 
+            tanfovy,
     ):
 
         float_to_ir = mlir.dtype_to_ir_type(np.dtype(np.float32))
@@ -239,15 +239,17 @@ def _build_rasterize_gaussians_bwd_primitive():
         if M != 0:
             M = ctx.avals_in[10].shape[1]
 
-        output_shapes = [
-                (num_gaussians, 3),  # dL_dmeans2D
-                (num_gaussians, 3),  # dL_dmeans3D
+        output_shapes = [   
+                (num_gaussians, 3),  # dL_dmeans3D,
+                (num_gaussians, 3),  # dL_dmeans2D,
                 (num_gaussians, 3), # dL_dcolors
+                (num_gaussians, 2,2), # dL_dconic
                 (num_gaussians, 1),  # dL_dopacity
+                (num_gaussians, 6),  # dL_dcov3D
+                (num_gaussians, 1, 3),  # dL_dsh
                 (num_gaussians, 3),  # dL_dscales
-                (num_gaussians, 4),# dL_drotations
-                ]
-
+                (num_gaussians, 4),  # dL_drotations
+        ]
         result_types = [mlir.ir.RankedTensorType.get(list(shp), float_to_ir) for shp in output_shapes]
 
         return custom_call(
@@ -301,63 +303,125 @@ def getProjectionMatrixJax(width, height, fx, fy, cx, cy, znear, zfar):
 rasterizer_fwd_primitive = _build_rasterize_gaussians_fwd_primitive()
 rasterizer_bwd_primitive = _build_rasterize_gaussians_bwd_primitive()
 
-def rasterize_fwd(
-    means3D, colors_precomp, opacity, scales, rotations,
-    camera_pose,
-    image_width, image_height, fx,fy, cx,cy,near,far
-):
-    fovX = jnp.arctan(image_width / 2 / fx) * 2.0
-    fovY = jnp.arctan(image_height / 2 / fy) * 2.0
-    tan_fovx = math.tan(fovX)
-    tan_fovy = math.tan(fovY)
+# def rasterize_fwd(
+#     means3D, colors_precomp, opacity, scales, rotations,
+#     camera_pose,
+#     image_width, image_height, fx,fy, cx,cy,near,far
+# ):
+#     fovX = jnp.arctan(image_width / 2 / fx) * 2.0
+#     fovY = jnp.arctan(image_height / 2 / fy) * 2.0
+#     tan_fovx = math.tan(fovX)
+#     tan_fovy = math.tan(fovY)
 
-    pmatrix = getProjectionMatrixJax(image_width, image_height, fx,fy, cx,cy,near,far)
-    view_matrix = jnp.transpose(jnp.linalg.inv(camera_pose))
+#     pmatrix = getProjectionMatrixJax(image_width, image_height, fx,fy, cx,cy,near,far)
+#     view_matrix = jnp.transpose(jnp.linalg.inv(camera_pose))
 
-    camera_pose_jax = jnp.eye(4)
-    view_matrix = jnp.transpose(jnp.linalg.inv(camera_pose_jax))
+#     camera_pose_jax = jnp.eye(4)
+#     view_matrix = jnp.transpose(jnp.linalg.inv(camera_pose_jax))
 
-    cov3D_precomp = jnp.zeros((means3D.shape[0], 3))
-    sh = jnp.zeros((means3D.shape[0], 3))
+#     cov3D_precomp = jnp.zeros((means3D.shape[0], 3))
+#     sh = jnp.zeros((means3D.shape[0], 3))
 
-    projmatrix = view_matrix @ pmatrix
-    (
-        num_rendered_jax,
-        color_jax,
-        radii_jax,
-        geomBuffer_jax,
-        binningBuffer_jax,
-        imgBuffer_jax
-    ) = rasterizer_fwd_primitive.bind(
-                jnp.zeros(3), # bg
-                means3D,
-                colors_precomp,
-                opacity,
-                scales,
-                rotations,
-                cov3D_precomp,
-                view_matrix,
-                projmatrix,
-                sh,
-                jnp.zeros(3), # campos
-                tanfovx=tan_fovx, 
-                tanfovy=tan_fovy, 
-                image_height=image_height, 
-                image_width=image_width,  
-                sh_degree=0
-    )
-    return color_jax, (
-        means3D, colors_precomp, opacity, scales, rotations,
-        image_width, image_height, fx,fy, cx,cy,near,far,
-        num_rendered_jax,
-        color_jax,
-        radii_jax,
-        geomBuffer_jax,
-        binningBuffer_jax,
-        imgBuffer_jax,
-        view_matrix,
-        projmatrix
-    )
+#     projmatrix = view_matrix @ pmatrix
+#     (
+#         num_rendered_jax,
+#         color_jax,
+#         radii_jax,
+#         geomBuffer_jax,
+#         binningBuffer_jax,
+#         imgBuffer_jax
+#     ) = rasterizer_fwd_primitive.bind(
+#                 jnp.zeros(3), # bg
+#                 means3D,
+#                 colors_precomp,
+#                 opacity,
+#                 scales,
+#                 rotations,
+#                 cov3D_precomp,
+#                 view_matrix,
+#                 projmatrix,
+#                 sh,
+#                 jnp.zeros(3), # campos
+#                 tanfovx=tan_fovx, 
+#                 tanfovy=tan_fovy, 
+#                 image_height=image_height, 
+#                 image_width=image_width,  
+#                 sh_degree=0
+#     )
+#     return color_jax, (
+#         means3D, colors_precomp, opacity, scales, rotations,
+#         image_width, image_height, fx,fy, cx,cy,near,far,
+#         num_rendered_jax,
+#         color_jax,
+#         radii_jax,
+#         geomBuffer_jax,
+#         binningBuffer_jax,
+#         imgBuffer_jax,
+#         view_matrix,
+#         projmatrix
+#     )
+
+# # def rasterize_bwd(res, gradients):
+# #     (
+# #         means3D, colors_precomp, opacity, scales, rotations,
+# #         image_width, image_height, fx,fy, cx,cy,near,far,
+# #         num_rendered_jax,
+# #         color_jax,
+# #         radii_jax,
+# #         geomBuffer_jax,
+# #         binningBuffer_jax,
+# #         imgBuffer_jax,
+# #         view_matrix,
+# #         projmatrix
+# #     ) = res
+# #     fovX = jnp.arctan(image_width / 2 / fx) * 2.0
+# #     fovY = jnp.arctan(image_height / 2 / fy) * 2.0
+# #     tan_fovx = math.tan(fovX)
+# #     tan_fovy = math.tan(fovY)
+# #     jax_bwd_args = (
+# #         jnp.zeros(3),
+# #         means3D, #1
+# #         radii_jax, #2 
+# #         colors_precomp, #3 
+# #         scales, #4
+# #         rotations, #5 
+# #         # raster_settings.scale_modifier), 
+# #         jnp.array([]), #6 
+# #         view_matrix, #7 
+# #         projmatrix, #8
+# #         gradients, #9
+# #         jnp.array([]), #10
+# #         jnp.zeros(3), #11
+# #         geomBuffer_jax, #12
+# #         num_rendered_jax,
+# #         binningBuffer_jax, #14
+# #         imgBuffer_jax #15
+# #     )
+# #     # print(tan_fovx, tan_fovy)
+# #     # return jax_bwd_args, tan_fovx, tan_fovy
+
+# #     (grad_means2D_jax,
+# #     grad_colors_precomp_jax,
+# #     grad_opacities_jax,
+# #     grad_means3D_jax,
+# #     grad_cov3Ds_precomp_jax,
+# #     grad_sh_jax,
+# #     grad_scales_jax, grad_rotations_jax, grad_conic) = rasterizer_bwd_primitive.bind(
+# #                 *jax_bwd_args,
+# #                 tanfovx=tan_fovx, 
+# #                 tanfovy=tan_fovy, 
+# #                 sh_degree=0
+# #     )
+# #     return (
+# #         grad_means3D_jax,
+# #         grad_colors_precomp_jax,
+# #         grad_opacities_jax,
+# #         grad_scales_jax,
+# #         grad_rotations_jax,
+# #         None, None, None,
+# #         None, None, None,
+# #         None, None, None,
+# #     )
 
 # def rasterize_bwd(res, gradients):
 #     (
@@ -376,6 +440,10 @@ def rasterize_fwd(
 #     fovY = jnp.arctan(image_height / 2 / fy) * 2.0
 #     tan_fovx = math.tan(fovX)
 #     tan_fovy = math.tan(fovY)
+
+#     cov3D_precomp = jnp.zeros((means3D.shape[0], 3))
+#     sh = jnp.zeros((means3D.shape[0], 3))
+
 #     jax_bwd_args = (
 #         jnp.zeros(3),
 #         means3D, #1
@@ -384,11 +452,11 @@ def rasterize_fwd(
 #         scales, #4
 #         rotations, #5 
 #         # raster_settings.scale_modifier), 
-#         jnp.array([]), #6 
+#         cov3D_precomp, #6 
 #         view_matrix, #7 
 #         projmatrix, #8
 #         gradients, #9
-#         jnp.array([]), #10
+#         sh, #10
 #         jnp.zeros(3), #11
 #         geomBuffer_jax, #12
 #         num_rendered_jax,
@@ -410,77 +478,11 @@ def rasterize_fwd(
 #                 tanfovy=tan_fovy, 
 #                 sh_degree=0
 #     )
-#     return (
-#         grad_means3D_jax,
-#         grad_colors_precomp_jax,
-#         grad_opacities_jax,
-#         grad_scales_jax,
-#         grad_rotations_jax,
-#         None, None, None,
-#         None, None, None,
-#         None, None, None,
-#     )
 
-def rasterize_bwd(res, gradients):
-    (
-        means3D, colors_precomp, opacity, scales, rotations,
-        image_width, image_height, fx,fy, cx,cy,near,far,
-        num_rendered_jax,
-        color_jax,
-        radii_jax,
-        geomBuffer_jax,
-        binningBuffer_jax,
-        imgBuffer_jax,
-        view_matrix,
-        projmatrix
-    ) = res
-    fovX = jnp.arctan(image_width / 2 / fx) * 2.0
-    fovY = jnp.arctan(image_height / 2 / fy) * 2.0
-    tan_fovx = math.tan(fovX)
-    tan_fovy = math.tan(fovY)
-
-    cov3D_precomp = jnp.zeros((means3D.shape[0], 3))
-    sh = jnp.zeros((means3D.shape[0], 3))
-
-    jax_bwd_args = (
-        jnp.zeros(3),
-        means3D, #1
-        radii_jax, #2 
-        colors_precomp, #3 
-        scales, #4
-        rotations, #5 
-        # raster_settings.scale_modifier), 
-        cov3D_precomp, #6 
-        view_matrix, #7 
-        projmatrix, #8
-        gradients, #9
-        sh, #10
-        jnp.zeros(3), #11
-        geomBuffer_jax, #12
-        num_rendered_jax,
-        binningBuffer_jax, #14
-        imgBuffer_jax #15
-    )
-    # print(tan_fovx, tan_fovy)
-    # return jax_bwd_args, tan_fovx, tan_fovy
-
-    (grad_means2D_jax,
-    grad_colors_precomp_jax,
-    grad_opacities_jax,
-    grad_means3D_jax,
-    grad_cov3Ds_precomp_jax,
-    grad_sh_jax,
-    grad_scales_jax, grad_rotations_jax, grad_conic) = rasterizer_bwd_primitive.bind(
-                *jax_bwd_args,
-                tanfovx=tan_fovx, 
-                tanfovy=tan_fovy, 
-                sh_degree=0
-    )
-
-    return (grad_means2D_jax,
-                grad_colors_precomp_jax,
-                grad_opacities_jax,
-                grad_means3D_jax,
-                grad_cov3Ds_precomp_jax,
-                grad_sh_jax,
-                grad_scales_jax, grad_rotations_jax, grad_conic)
+#     return (grad_means2D_jax,
+#                 grad_colors_precomp_jax,
+#                 grad_opacities_jax,
+#                 grad_means3D_jax,
+#                 grad_cov3Ds_precomp_jax,
+#                 grad_sh_jax,
+#                 grad_scales_jax, grad_rotations_jax, grad_conic)

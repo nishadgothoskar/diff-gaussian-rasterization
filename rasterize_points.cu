@@ -23,7 +23,7 @@
 #include <fstream>
 #include <string>
 #include <functional>
-
+#include "rasterize_points.h"
 
 std::function<char*(size_t N)> resizeFunctionalDummy(auto& t) {
     auto lambda = [&t](size_t N) {
@@ -45,7 +45,9 @@ void RasterizeGaussiansCUDAJAX(
     const RasterizeDescriptor &descriptor = 
         *UnpackDescriptor<RasterizeDescriptor>(opaque, opaque_len);
 
-	// inputs.
+	// inputs.[bg, means3D, colors_precomp, opacities, scales, rotations,
+                    //   viewmatrix, projmatrix, campos,cov3D_precomp,
+                    // shs]
     const float *background = reinterpret_cast<const float *> (buffers[0]);
     const float *means3D = reinterpret_cast<const float *> (buffers[1]);
     const float *colors = reinterpret_cast<const float *> (buffers[2]);
@@ -84,6 +86,8 @@ void RasterizeGaussiansCUDAJAX(
 	std::function<char*(size_t)> imgFunc = resizeFunctionalDummy(imgBuffer);
 	cudaStreamSynchronize(stream);
 
+	auto cov3D_precomp = nullptr;
+	auto sh = nullptr;
 	int rendered = 0;
 	if(P != 0)
 	{
@@ -172,19 +176,19 @@ void RasterizeGaussiansBackwardCUDAJAX(
 
 	int M = 1;
 
+    cudaMemset(dL_dmeans3D, 0.0, P*3*sizeof(float));
     cudaMemset(dL_dmeans2D, 0.0, P*3*sizeof(float));
     cudaMemset(dL_dcolors, 0.0, P*3*sizeof(float));
+    cudaMemset(dL_dconic, 0.0, P*4*sizeof(float));
     cudaMemset(dL_dopacity, 0.0, P*1*sizeof(float));
-    cudaMemset(dL_dmeans3D, 0.0, P*3*sizeof(float));
     cudaMemset(dL_dcov3D, 0.0, P*6*sizeof(float));
     cudaMemset(dL_dsh, 0.0, P*M*3*sizeof(float));
     cudaMemset(dL_dscales, 0.0, P*3*sizeof(float));
     cudaMemset(dL_drotations, 0.0, P*4*sizeof(float));
-    cudaMemset(dL_dconic, 0.0, P*4*sizeof(float));
 	cudaStreamSynchronize(stream);
 
 	auto cov3D_precomp = nullptr;
-	auto shs = nullptr;
+	auto sh = nullptr;
 	if(P != 0)
 	{  
 		CudaRasterizer::Rasterizer::backward(P, degree, M, R,
