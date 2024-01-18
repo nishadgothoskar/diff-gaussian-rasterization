@@ -279,7 +279,6 @@ int CudaRasterizer::Rasterizer::forward(
 	// Retrieve total number of Gaussian instances to launch and resize aux buffers
 	int num_rendered;
 	CHECK_CUDA(cudaMemcpy(&num_rendered, geomState.point_offsets + P - 1, sizeof(int), cudaMemcpyDeviceToHost), debug);
-	// CHECK_CUDA(cudaMemcpy(out_num_rendered, &num_rendered, sizeof(int), cudaMemcpyDefault), debug);
 
 	size_t binning_chunk_size = required<BinningState>(num_rendered);
 	char* binning_chunkptr = binningBuffer(binning_chunk_size);
@@ -369,10 +368,9 @@ void CudaRasterizer::Rasterizer::backward(
 	float* dL_drot,
 	bool debug)
 {
-	ImageState imgState = ImageState::fromChunk(img_buffer, width * height);
 	GeometryState geomState = GeometryState::fromChunk(geom_buffer, P);
 	BinningState binningState = BinningState::fromChunk(binning_buffer, R);
-	
+	ImageState imgState = ImageState::fromChunk(img_buffer, width * height);
 
 	if (radii == nullptr)
 	{
@@ -389,8 +387,7 @@ void CudaRasterizer::Rasterizer::backward(
 	// opacity and RGB of Gaussians from per-pixel loss gradients.
 	// If we were given precomputed colors and not SHs, use them.
 	const float* color_ptr = (colors_precomp != nullptr) ? colors_precomp : geomState.rgb;
-	CHECK_CUDA(
-		BACKWARD::render(
+	CHECK_CUDA(BACKWARD::render(
 		tile_grid,
 		block,
 		imgState.ranges,
@@ -406,13 +403,11 @@ void CudaRasterizer::Rasterizer::backward(
 		(float3*)dL_dmean2D,
 		(float4*)dL_dconic,
 		dL_dopacity,
-		dL_dcolor), debug
-	)
+		dL_dcolor), debug)
 
 	// Take care of the rest of preprocessing. Was the precomputed covariance
 	// given to us or a scales/rot pair? If precomputed, pass that. If not,
 	// use the one we computed ourselves.
-	cov3D_precomp = nullptr;
 	const float* cov3D_ptr = (cov3D_precomp != nullptr) ? cov3D_precomp : geomState.cov3D;
 	CHECK_CUDA(BACKWARD::preprocess(P, D, M,
 		(float3*)means3D,
