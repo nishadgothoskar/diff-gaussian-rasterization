@@ -301,104 +301,104 @@ def getProjectionMatrixJax(width, height, fx, fy, cx, cy, znear, zfar):
 rasterizer_fwd_primitive = _build_rasterize_gaussians_fwd_primitive()
 rasterizer_bwd_primitive = _build_rasterize_gaussians_bwd_primitive()
 
-def rasterize_fwd(
-    means3D, colors_precomp, opacity, scales, rotations,
-    image_width, image_height, fx,fy, cx,cy, near, far
-):
-    fovX = jnp.arctan(image_width / 2 / fx) * 2.0
-    fovY = jnp.arctan(image_height / 2 / fy) * 2.0
-    tan_fovx = math.tan(fovX)
-    tan_fovy = math.tan(fovY)
+# def rasterize_fwd(
+#     means3D, colors_precomp, opacity, scales, rotations,
+#     image_width, image_height, fx,fy, cx,cy, near, far
+# ):
+#     fovX = jnp.arctan(image_width / 2 / fx) * 2.0
+#     fovY = jnp.arctan(image_height / 2 / fy) * 2.0
+#     tan_fovx = math.tan(fovX)
+#     tan_fovy = math.tan(fovY)
 
-    pmatrix = getProjectionMatrixJax(image_width, image_height, fx,fy, cx,cy,near,far)
-    view_matrix = jnp.transpose(jnp.linalg.inv(jnp.eye(4)))
+#     pmatrix = getProjectionMatrixJax(image_width, image_height, fx,fy, cx,cy,near,far)
+#     view_matrix = jnp.transpose(jnp.linalg.inv(jnp.eye(4)))
 
-    projmatrix = view_matrix @ pmatrix
+#     projmatrix = view_matrix @ pmatrix
 
-    bg = jnp.zeros(3)
-    campos = jnp.zeros(3)
-    num_rendered, color, radii, geomBuffer, binningBuffer, imgBuffer = rasterizer_fwd_primitive.bind(
-                bg,
-                means3D,
-                colors_precomp,
-                opacity,
-                scales,
-                rotations,
-                view_matrix,
-                projmatrix,
-                campos,
-                tanfovx=tan_fovx, 
-                tanfovy=tan_fovy, 
-                image_height=image_height, 
-                image_width=image_width,  
-    )
-    return color, (
-        means3D, colors_precomp, opacity, scales, rotations,
-        image_width, image_height, fx,fy, cx,cy,near,far,
-        bg,campos,
-        num_rendered,
-        color,
-        radii,
-        geomBuffer,
-        binningBuffer,
-        imgBuffer,
-        view_matrix,
-        projmatrix
-    )
+#     bg = jnp.zeros(3)
+#     campos = jnp.zeros(3)
+#     num_rendered, color, radii, geomBuffer, binningBuffer, imgBuffer = rasterizer_fwd_primitive.bind(
+#                 bg,
+#                 means3D,
+#                 colors_precomp,
+#                 opacity,
+#                 scales,
+#                 rotations,
+#                 view_matrix,
+#                 projmatrix,
+#                 campos,
+#                 tanfovx=tan_fovx, 
+#                 tanfovy=tan_fovy, 
+#                 image_height=image_height, 
+#                 image_width=image_width,  
+#     )
+#     return color, (
+#         means3D, colors_precomp, opacity, scales, rotations,
+#         image_width, image_height, fx,fy, cx,cy,near,far,
+#         bg,campos,
+#         num_rendered,
+#         color,
+#         radii,
+#         geomBuffer,
+#         binningBuffer,
+#         imgBuffer,
+#         view_matrix,
+#         projmatrix
+#     )
 
-def rasterize_bwd(res, gradients):
-    (
-        means3D, colors_precomp, opacity, scales, rotations,
-        image_width, image_height, fx,fy, cx,cy,near,far,
-        bg,campos,
-        num_rendered,
-        color,
-        radii,
-        geomBuffer,
-        binningBuffer,
-        imgBuffer,
-        view_matrix,
-        projmatrix
-    ) = res
-    fovX = jnp.arctan(image_width / 2 / fx) * 2.0
-    fovY = jnp.arctan(image_height / 2 / fy) * 2.0
-    tan_fovx = math.tan(fovX)
-    tan_fovy = math.tan(fovY)
+# def rasterize_bwd(res, gradients):
+#     (
+#         means3D, colors_precomp, opacity, scales, rotations,
+#         image_width, image_height, fx,fy, cx,cy,near,far,
+#         bg,campos,
+#         num_rendered,
+#         color,
+#         radii,
+#         geomBuffer,
+#         binningBuffer,
+#         imgBuffer,
+#         view_matrix,
+#         projmatrix
+#     ) = res
+#     fovX = jnp.arctan(image_width / 2 / fx) * 2.0
+#     fovY = jnp.arctan(image_height / 2 / fy) * 2.0
+#     tan_fovx = math.tan(fovX)
+#     tan_fovy = math.tan(fovY)
 
-    (dL_dmeans3D,
-    dL_dmeans2D,
-    dL_dcolors,
-    dL_dconic,
-    dL_dopacity,
-    dL_dcov3D,
-    dL_dsh,
-    dL_dscales,
-    dL_drotations) = rasterizer_bwd_primitive.bind(
-                bg,
-                means3D,
-                radii,
-                colors_precomp,
-                scales,
-                rotations,
-                view_matrix,
-                projmatrix,
-                gradients,
-                campos,
-                geomBuffer,
-                num_rendered,
-                binningBuffer,
-                imgBuffer,
-                tanfovx=tan_fovx, 
-                tanfovy=tan_fovy,
-    )
+#     (dL_dmeans3D,
+#     dL_dmeans2D,
+#     dL_dcolors,
+#     dL_dconic,
+#     dL_dopacity,
+#     dL_dcov3D,
+#     dL_dsh,
+#     dL_dscales,
+#     dL_drotations) = rasterizer_bwd_primitive.bind(
+#                 bg,
+#                 means3D,
+#                 radii,
+#                 colors_precomp,
+#                 scales,
+#                 rotations,
+#                 view_matrix,
+#                 projmatrix,
+#                 gradients,
+#                 campos,
+#                 geomBuffer,
+#                 num_rendered,
+#                 binningBuffer,
+#                 imgBuffer,
+#                 tanfovx=tan_fovx, 
+#                 tanfovy=tan_fovy,
+#     )
 
-    return (dL_dmeans3D,
-        dL_dmeans2D,
-        dL_dcolors,
-        dL_dconic,
-        dL_dopacity,
-        dL_dcov3D,
-        dL_dsh,
-        dL_dscales,
-        dL_drotations
-    )
+#     return (dL_dmeans3D,
+#         dL_dmeans2D,
+#         dL_dcolors,
+#         dL_dconic,
+#         dL_dopacity,
+#         dL_dcov3D,
+#         dL_dsh,
+#         dL_dscales,
+#         dL_drotations
+#     )
