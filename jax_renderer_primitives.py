@@ -212,17 +212,17 @@ def _build_rasterize_gaussians_bwd_primitive():
             binningBuffer,
             imgBuffer,
             tanfovx, 
-            tanfovy,
+            tanfovy, 
     ):
 
         float_to_ir = mlir.dtype_to_ir_type(np.dtype(np.float32))
 
         num_gaussians = ctx.avals_in[1].shape[0]  
-        image_height, image_width = ctx.avals_in[9].shape[1:3]
-
+        image_height, image_width = ctx.avals_in[8].shape[1:3]
+        print("image_height, image_width ",image_height, image_width)
         opaque = _C.build_gaussian_rasterize_descriptor(
             image_height, image_width, 0, num_gaussians, tanfovx, tanfovy,   
-            -1, -1, -1   # buffer sizes are irrelevant for bwd  
+            1, 1, 1   # buffer sizes are irrelevant for bwd  
         )
 
         op_name = "rasterize_gaussians_bwd"
@@ -235,9 +235,7 @@ def _build_rasterize_gaussians_bwd_primitive():
 
         operands_ctx = ctx.avals_in[:len(operands)]
 
-        M = ctx.avals_in[10].shape[0]  # sh.shape[0]
-        if M != 0:
-            M = ctx.avals_in[10].shape[1]
+        M = 1
 
         output_shapes = [   
                 (num_gaussians, 3),  # dL_dmeans3D,

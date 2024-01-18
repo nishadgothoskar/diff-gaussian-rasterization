@@ -172,7 +172,6 @@ void RasterizeGaussiansBackwardCUDAJAX(
 
 	int R;
 	cudaMemcpy(&R, _R, sizeof(int), cudaMemcpyDefault);
-	printf("R: %d\n", R);
 
 	int M = 1;
 
