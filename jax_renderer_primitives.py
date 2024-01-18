@@ -272,7 +272,8 @@ def _build_rasterize_gaussians_bwd_primitive():
 
     return _rasterize_prim
 
-
+rasterizer_fwd_primitive = _build_rasterize_gaussians_fwd_primitive()
+rasterizer_bwd_primitive = _build_rasterize_gaussians_bwd_primitive()
 
 def getProjectionMatrixJax(width, height, fx, fy, cx, cy, znear, zfar):
     fovX = jnp.arctan(width / 2 / fx) * 2.0
@@ -302,7 +303,7 @@ rasterizer_bwd_primitive = _build_rasterize_gaussians_bwd_primitive()
 
 def rasterize_fwd(
     means3D, colors_precomp, opacity, scales, rotations,
-    image_width, image_height, fx,fy, cx,cy,near,far
+    image_width, image_height, fx,fy, cx,cy, near, far
 ):
     fovX = jnp.arctan(image_width / 2 / fx) * 2.0
     fovY = jnp.arctan(image_height / 2 / fy) * 2.0
