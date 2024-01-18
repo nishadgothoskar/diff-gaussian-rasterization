@@ -189,7 +189,8 @@ def _build_rasterize_gaussians_bwd_primitive():
                 ShapedArray((num_gaussians, 3),  float_dtype), # dL_dcolors
                 ShapedArray((num_gaussians, 2,2),  float_dtype), # dL_dconic
                 ShapedArray((num_gaussians, 1), float_dtype),  # dL_dopacity
-                ShapedArray((num_gaussians, 2,2),  float_dtype), # dL_dconic
+                ShapedArray((num_gaussians, 6), float_dtype),  # dL_dcov3D
+                ShapedArray((num_gaussians, 1, 3), float_dtype),  # dL_dsh
                 ShapedArray((num_gaussians, 3), float_dtype),  # dL_dscales
                 ShapedArray((num_gaussians, 4), float_dtype),  # dL_drotations
         ]

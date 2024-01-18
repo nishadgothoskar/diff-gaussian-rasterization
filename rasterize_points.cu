@@ -41,6 +41,7 @@ void RasterizeGaussiansCUDAJAX(
 	const char *opaque, std::size_t opaque_len
 )
 {
+	cudaStreamSynchronize(stream);
     const RasterizeDescriptor &descriptor = 
         *UnpackDescriptor<RasterizeDescriptor>(opaque, opaque_len);
 
@@ -81,16 +82,12 @@ void RasterizeGaussiansCUDAJAX(
 	std::function<char*(size_t)> geomFunc = resizeFunctionalDummy(geomBuffer);
 	std::function<char*(size_t)> binningFunc = resizeFunctionalDummy(binningBuffer);
 	std::function<char*(size_t)> imgFunc = resizeFunctionalDummy(imgBuffer);
+	cudaStreamSynchronize(stream);
 
 	int rendered = 0;
 	if(P != 0)
 	{
-		int M = 0;
-		// if(sh.size(0) != 0)
-		// {
-		// M = sh.size(1);
-		// }
-
+		int M = 1;
 		rendered = CudaRasterizer::Rasterizer::forward(
 		geomFunc,
 		binningFunc,
@@ -117,7 +114,10 @@ void RasterizeGaussiansCUDAJAX(
 		debug);
 		
 	}
+	cudaStreamSynchronize(stream);
 	cudaMemcpy(out_num_rendered, &rendered, sizeof(int), cudaMemcpyDefault);
+	cudaStreamSynchronize(stream);
+
 }
 
 
@@ -126,6 +126,7 @@ void RasterizeGaussiansBackwardCUDAJAX(
 	void **buffers,
 	const char *opaque, std::size_t opaque_len
 ){
+	cudaStreamSynchronize(stream);
     const RasterizeDescriptor &descriptor = 
         *UnpackDescriptor<RasterizeDescriptor>(opaque, opaque_len);
 	// image_height, image_width, degree, P
@@ -155,21 +156,21 @@ void RasterizeGaussiansBackwardCUDAJAX(
 	const bool debug = false;
 	
 	// outputs
-	float* dL_dmeans2D = reinterpret_cast<float*> (buffers[16]);
-	float* dL_dcolors = reinterpret_cast<float*> (buffers[17]);
+	float* dL_dmeans3D = reinterpret_cast<float*> (buffers[14]);
+	float* dL_dmeans2D = reinterpret_cast<float*> (buffers[15]);
+	float* dL_dcolors = reinterpret_cast<float*> (buffers[16]);
+	float* dL_dconic = reinterpret_cast<float*> (buffers[17]);
 	float* dL_dopacity = reinterpret_cast<float*> (buffers[18]);
-	float* dL_dmeans3D = reinterpret_cast<float*> (buffers[19]);
-	float* dL_dcov3D = reinterpret_cast<float*> (buffers[20]);
-	float* dL_dsh = reinterpret_cast<float*> (buffers[21]);
-	float* dL_dscales = reinterpret_cast<float*> (buffers[22]);
-	float* dL_drotations = reinterpret_cast<float*> (buffers[23]);
-	float* dL_dconic = reinterpret_cast<float*> (buffers[24]);
+	float* dL_dcov3D = reinterpret_cast<float*> (buffers[19]);
+	float* dL_dsh = reinterpret_cast<float*> (buffers[20]);
+	float* dL_dscales = reinterpret_cast<float*> (buffers[21]);
+	float* dL_drotations = reinterpret_cast<float*> (buffers[22]);
 
 	int R;
 	cudaMemcpy(&R, _R, sizeof(int), cudaMemcpyDefault);
 	printf("R: %d\n", R);
 
-	int M = 0;
+	int M = 1;
 
     cudaMemset(dL_dmeans2D, 0.0, P*3*sizeof(float));
     cudaMemset(dL_dcolors, 0.0, P*3*sizeof(float));
@@ -180,12 +181,10 @@ void RasterizeGaussiansBackwardCUDAJAX(
     cudaMemset(dL_dscales, 0.0, P*3*sizeof(float));
     cudaMemset(dL_drotations, 0.0, P*4*sizeof(float));
     cudaMemset(dL_dconic, 0.0, P*4*sizeof(float));
+	cudaStreamSynchronize(stream);
 
-	// if(sh.size(0) != 0)
-	// {	
-	// 	M = sh.size(1);
-	// } // TODO
-
+	auto cov3D_precomp = nullptr;
+	auto shs = nullptr;
 	if(P != 0)
 	{  
 		CudaRasterizer::Rasterizer::backward(P, degree, M, R,
@@ -219,6 +218,7 @@ void RasterizeGaussiansBackwardCUDAJAX(
 		dL_drotations,
 		debug);
 	}
+	cudaStreamSynchronize(stream);
 }
 
 
