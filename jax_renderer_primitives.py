@@ -219,7 +219,6 @@ def _build_rasterize_gaussians_bwd_primitive():
 
         num_gaussians = ctx.avals_in[1].shape[0]  
         image_height, image_width = ctx.avals_in[8].shape[1:3]
-        print("image_height, image_width ",image_height, image_width)
         opaque = _C.build_gaussian_rasterize_descriptor(
             image_height, image_width, 0, num_gaussians, tanfovx, tanfovy,   
             1, 1, 1   # buffer sizes are irrelevant for bwd  
