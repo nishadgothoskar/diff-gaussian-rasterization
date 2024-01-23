@@ -141,14 +141,14 @@ class _RasterizeGaussians(torch.autograd.Function):
              grad_means2D, grad_colors_precomp, grad_opacities, grad_means3D, grad_cov3Ds_precomp, grad_sh, grad_scales, grad_rotations = _C.rasterize_gaussians_backward(*args)
 
         grads = (
-            grad_means3D,
-            grad_means2D,
-            grad_sh,
-            grad_colors_precomp,
-            grad_opacities,
-            grad_scales,
-            grad_rotations,
-            grad_cov3Ds_precomp,
+            grad_means3D,  #n,3
+            grad_means2D, # n 3
+            grad_sh, # n 0 3
+            grad_colors_precomp, # n 3
+            grad_opacities,  # n 1
+            grad_scales,  # n 3
+            grad_rotations, # n 4 
+            grad_cov3Ds_precomp,  # n 6
             None,
         )
 
@@ -246,6 +246,8 @@ NUM_CHANNELS = 3
 TEN_E_5 = int(1e5)
 TEN_E_6 = int(1e6)
 TEN_E_7 = int(1e7)
+TEN_E_8 = int(1e8)
+
 
 for _name, _value in _C.registrations().items():
     xla_client.register_custom_call_target(_name, _value, platform="gpu")
@@ -313,7 +315,7 @@ def _build_rasterize_gaussians_fwd_primitive():
         GEOM_BUFFER_SIZE = TEN_E_6
         BINNING_BUFFER_SIZE = TEN_E_6
         IMG_BUFFER_SIZE = TEN_E_7
-
+        
         num_gaussians = ctx.avals_in[1].shape[0]    
         opaque = _C.build_gaussian_rasterize_descriptor(
             image_height, image_width, 0, num_gaussians, tanfovx, tanfovy, 
@@ -636,6 +638,7 @@ def rasterize_bwd(image_width, image_height, fx,fy, cx,cy, near, far, res, gradi
     fovY = np.arctan(image_height / 2 / fy) * 2.0
     tan_fovx = np.tan(fovX)
     tan_fovy = np.tan(fovY)
+    
 
     (dL_dmeans3D,
     dL_dmeans2D,
@@ -663,6 +666,7 @@ def rasterize_bwd(image_width, image_height, fx,fy, cx,cy, near, far, res, gradi
                 tanfovx=tan_fovx, 
                 tanfovy=tan_fovy,
     )
+
     return (
         dL_dmeans3D,
         dL_dcolors,

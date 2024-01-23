@@ -95,7 +95,7 @@ def render_jax_with_param_transform(means3D, colors_precomp, opacity, scales, ro
         color = rasterize(
             means3D, 
             colors_precomp, 
-            jnp.exp(jax.nn.log_sigmoid(opacity)), 
+            jnp.exp(jax.lax.log_sigmoid(opacity)), 
             jnp.exp(scales), 
             rotations,
             image_width, image_height, fx,fy, cx,cy,near,far
@@ -135,7 +135,7 @@ reset(default_seed)
 intrinsics = Intrinsics(
     height=200,
     width=200,
-    fx=300.0, fy=300.0,
+    fx=303.0, fy=303.0,
     cx=100.0, cy=100.0,
     near=0.01, far=2.5
 )
@@ -199,7 +199,8 @@ color_gt_torch = jax_to_torch(color_gt_jax)
 # _, (ax1, ax2) = plt.subplots(1, 2)
 # ax1.imshow(jnp.transpose(color_gt_jax[:3], (1,2,0)))
 # ax1.imshow(jnp.transpose(color_gt_jax[:3], (1,2,0)))
-plt.imsave("gt.png", jnp.transpose(color_gt_jax[:3], (1,2,0)))
+plt.imsave("gt303.png", jnp.transpose(color_gt_jax[:3], (1,2,0)))
+
 
 ##########################################################################################
 # FWD TEST
@@ -221,11 +222,12 @@ print(f"JAX FWD TIME={end-start} s")
 plt.imsave("jax_fwd_0.png", jnp.transpose(color_jax[:3], (1,2,0)))
 
 torch_means3d = jax_to_torch(means3D) # jank
-torch_means2d = torch.zeros_like(torch_means3d, dtype=torch_means3d.dtype, requires_grad=True, device="cuda") + 0
+torch_means2d = torch.zeros_like(torch_means3d, dtype=torch_means3d.dtype, requires_grad=False, device="cuda") + 0
 torch_colors_precomp = jax_to_torch(colors_precomp)
 torch_opacity = jax_to_torch(opacity)
 torch_scales = jax_to_torch(scales)
 torch_rotations = jax_to_torch(rotations)
+
 for _ in range(2):
     start = time.time()
     color_torch = render_torch_with_param_transform(torch_means3d, torch_means2d, torch_colors_precomp, torch_opacity, torch_scales, torch_rotations, torch_rasterizer)
@@ -255,7 +257,7 @@ loss_grad = jax.jit(jax.value_and_grad(loss, argnums=(0,1,2,3,4,)), static_argnu
 print("\n------------\n Jax Optim \n----------\n")
 
 import optax
-it = 100
+it = 200
 
 params = (means3D, colors_precomp, opacity, scales, rotations)
 param_labels = ("means3D", "colors_precomp", "opacity", "scales", "rotations")
@@ -273,6 +275,7 @@ state = tx.init(params)
 
 pbar = tqdm(range(it))
 all_jax_losses = []
+
 for _ in pbar:
     # gradients: dL_dmeans3D,
         # dL_dcolors,
@@ -286,7 +289,7 @@ for _ in pbar:
         intrinsics.near, intrinsics.far, color_gt_jax
     )
     (dL_dmeans3D, dL_dcolors, dL_dopacity, dL_dscales, dL_drotations) = gradients_jax
-    pbar.set_description(f"loss: {loss_val_jax:.4f}")
+    pbar.set_description(f"loss: {loss_val_jax.item()}")
 
     updates, state = tx.update(gradients_jax, state, params)
     params = optax.apply_updates(params, updates)
