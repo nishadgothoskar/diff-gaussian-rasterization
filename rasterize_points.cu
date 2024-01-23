@@ -177,7 +177,7 @@ void RasterizeGaussiansBackwardCUDAJAX(
 
     cudaMemset(dL_dmeans3D, 0.0, P*3*sizeof(float));
     cudaMemset(dL_dmeans2D, 0.0, P*3*sizeof(float));
-    cudaMemset(dL_dcolors, 0.0, P*3*sizeof(float));
+    cudaMemset(dL_dcolors, 0.0, P*NUM_CHANNELS*sizeof(float));
     cudaMemset(dL_dconic, 0.0, P*4*sizeof(float));
     cudaMemset(dL_dopacity, 0.0, P*1*sizeof(float));
     cudaMemset(dL_dcov3D, 0.0, P*6*sizeof(float));
