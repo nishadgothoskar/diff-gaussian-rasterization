@@ -237,7 +237,7 @@ import math
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-NUM_CHANNELS = 5
+NUM_CHANNELS = 3
 
 ################################
 # Helpers and boilerplates
@@ -283,8 +283,8 @@ def _build_rasterize_gaussians_fwd_primitive():
 
         num_gaussians, _ = means3D.shape
 
-        GEOM_BUFFER_SIZE = TEN_E_6 * 5
-        BINNING_BUFFER_SIZE = TEN_E_6 * 5
+        GEOM_BUFFER_SIZE = TEN_E_6
+        BINNING_BUFFER_SIZE = TEN_E_6
         IMG_BUFFER_SIZE = TEN_E_7
 
         return [ShapedArray((1,), int_dtype),
@@ -312,8 +312,8 @@ def _build_rasterize_gaussians_fwd_primitive():
         int_to_ir = mlir.dtype_to_ir_type(np.dtype(np.int32))
         byte_to_ir = mlir.dtype_to_ir_type(np.dtype(np.uint8))
 
-        GEOM_BUFFER_SIZE = TEN_E_6 * 5
-        BINNING_BUFFER_SIZE = TEN_E_6 * 5
+        GEOM_BUFFER_SIZE = TEN_E_6
+        BINNING_BUFFER_SIZE = TEN_E_6
         IMG_BUFFER_SIZE = TEN_E_7
         
         num_gaussians = ctx.avals_in[1].shape[0]    
@@ -530,12 +530,12 @@ rasterizer_fwd_primitive = _build_rasterize_gaussians_fwd_primitive()
 rasterizer_bwd_primitive = _build_rasterize_gaussians_bwd_primitive()
 
 def expand_color(means3D, color):
-    # return color
-    return jnp.hstack([
-        color,
-        means3D[:,2:3],
-        jnp.ones((means3D.shape[0], 1)),
-    ])
+    return color
+    # return jnp.hstack([
+    #     color,
+        # means3D[:,2:3],
+        # jnp.ones((means3D.shape[0], 1)),
+    # ])
 
 @functools.partial(jax.custom_vjp, nondiff_argnums=(5,6,7,8,9,10,11,12))
 def rasterize(
