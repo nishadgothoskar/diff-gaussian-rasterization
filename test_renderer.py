@@ -81,25 +81,15 @@ gt_seed = 1
 
 
 def render_jax_with_param_transform(means3D, colors_precomp, opacity, scales, rotations,
-           image_width, image_height, fx,fy, cx,cy,near,far, preproc=False):
-    if not preproc:
-        color = rasterize(
-            means3D, 
-            colors_precomp, 
-            opacity, 
-            scales, 
-            rotations,
-            image_width, image_height, fx,fy, cx,cy,near,far
-        ) 
-    else: 
-        color = rasterize(
-            means3D, 
-            colors_precomp, 
-            jnp.exp(jax.lax.log_sigmoid(opacity)), 
-            jnp.exp(scales), 
-            rotations,
-            image_width, image_height, fx,fy, cx,cy,near,far
-        ) 
+           image_width, image_height, fx,fy, cx,cy,near,far):
+    color = rasterize(
+        means3D, 
+        colors_precomp, 
+        opacity, 
+        scales, 
+        rotations,
+        image_width, image_height, fx,fy, cx,cy,near,far
+    ) 
     return color
 
 
@@ -147,7 +137,7 @@ tan_fovy = math.tan(fovY)
 
 N = 100
 means3D = jax.random.uniform(jax.random.PRNGKey(default_seed), shape=(N, 3), minval=-0.5, maxval=0.5) + jnp.array([0.0, 0.0, 1.0])
-opacity = jnp.ones(shape=(N,1)) * 1.0; opacity = jnp.exp(jax.nn.log_sigmoid(opacity))
+opacity = jnp.exp(jax.nn.log_sigmoid(jnp.ones(shape=(N,1)) * 1.0))
 scales = jnp.ones((N,3)) * -4.5; scales = jnp.exp(scales)  # PREPROC 
 rotations = jnp.ones((N,4)) * -1.0  
 colors_precomp = jax.random.uniform(jax.random.PRNGKey(default_seed), shape=(N,3), minval=0.0, maxval=1.0)
@@ -277,11 +267,6 @@ pbar = tqdm(range(it))
 all_jax_losses = []
 
 for _ in pbar:
-    # gradients: dL_dmeans3D,
-        # dL_dcolors,
-        # dL_dopacity,
-        # dL_dscales,
-        # dL_drotations
     loss_val_jax, gradients_jax = loss_grad(
         *params,
         intrinsics.width, intrinsics.height, intrinsics.fx, intrinsics.fy, 
