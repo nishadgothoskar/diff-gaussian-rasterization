@@ -92,7 +92,8 @@ void RasterizeGaussiansCUDAJAX(
 	if(P != 0)
 	{
 		int M = 1;
-		rendered = CudaRasterizer::Rasterizer::forward(
+		rendered = CudaRasterizer::Rasterizer::forwardJAX(
+		stream,  // NEW
 		geomFunc,
 		binningFunc,
 		imgFunc,
@@ -190,7 +191,9 @@ void RasterizeGaussiansBackwardCUDAJAX(
 	auto sh = nullptr;
 	if(P != 0)
 	{  
-		CudaRasterizer::Rasterizer::backward(P, degree, M, R,
+		CudaRasterizer::Rasterizer::backwardJAX(
+		stream,	
+		P, degree, M, R,
 		background,
 		W, H, 
 		means3D,

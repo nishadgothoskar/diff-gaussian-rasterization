@@ -16,11 +16,8 @@ from tqdm import tqdm
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 torch.backends.cudnn.deterministic=True
 
-import os
-# os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"  # add this
-os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.65"
 
-N = 50
+N = 200
 
 ####################
 # Helpers, Constants
@@ -172,7 +169,6 @@ print(f"JAX FWD TIME={end-start} s")
 plt.imsave("jax_fwd_0.png", jnp.transpose(color_jax[:3], (1,2,0)))
 print("JAX min/max/sum: ", test(color_jax))
 
-from IPython import embed; embed()
 # ##########################################################################################
 # # BWD TEST
 # ##########################################################################################
@@ -193,18 +189,19 @@ loss_grad = jax.jit(loss_grad)
 print("\n------------\n Jax Optim \n----------\n")
 
 import optax
-it = 5
+it = 250
 
 init_params = (means3D, colors_precomp, opacity, scales, rotations)
 params = init_params
 param_labels = ("means3D", "colors_precomp", "opacity", "scales", "rotations")
+lr1, lr2 = 1e-3, 1e-4
 tx = optax.multi_transform(
     {
-        'means3D': optax.adam(0.001),
-        'colors_precomp': optax.adam(0.001),
-        'opacity': optax.adam(0.0001),
-        'scales': optax.adam(0.0001),
-        'rotations': optax.adam(0.0001),
+        'means3D': optax.adam(lr1),
+        'colors_precomp': optax.adam(lr1),
+        'opacity': optax.adam(lr2),
+        'scales': optax.adam(lr2),
+        'rotations': optax.adam(lr2),
     },
     param_labels
 )
@@ -216,7 +213,7 @@ def inference_optax(params, tx, jit=False):
         (loss_val_jax, color_out), gradients_jax = loss_grad(
             *params, color_gt_jax
         )
-        jax.debug.print("COLOR OUT={color_out_sum}", color_out_sum=color_out.sum())
+        # jax.debug.print("COLOR OUT={color_out_sum}", color_out_sum=color_out.sum())
         (dL_dmeans3D, dL_dcolors, dL_dopacity, dL_dscales, dL_drotations) = gradients_jax
         # jax.debug.print("🤯 gradient1={gradients_jax}, gradient2={gradients_jax1} gradient3={gradients_jax2} 🤯 loss={loss_val_jax}", gradients_jax=gradients_jax[0].sum(), gradients_jax1=gradients_jax[1].sum(), gradients_jax2=gradients_jax[2].sum(), loss_val_jax=loss_val_jax)
 
@@ -226,7 +223,6 @@ def inference_optax(params, tx, jit=False):
         return params, state, loss_val_jax
     if jit:
         step = jax.jit(step)
-        step(params, tx.init(tuple([jnp.zeros_like(p) for p in params])))
 
     pbar = tqdm(range(it))
     state = tx.init(params)
@@ -242,9 +238,9 @@ print("\nOptax jitted")
 params, losses = inference_optax(init_params, tx, jit=True)
 print(losses)
 losses = []
-print("\nOptax nonjitted")
-params, losses = inference_optax(init_params, tx, jit=False)
-print(losses)
+# print("\nOptax nonjitted")
+# params, losses = inference_optax(init_params, tx, jit=False)
+# print(losses)
 
 
 

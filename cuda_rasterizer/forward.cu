@@ -373,6 +373,33 @@ renderCUDA(
 	}
 }
 
+void FORWARD::renderJAX(
+	cudaStream_t stream,  // new
+	const dim3 grid, dim3 block,
+	const uint2* ranges,
+	const uint32_t* point_list,
+	int W, int H,
+	const float2* means2D,
+	const float* colors,
+	const float4* conic_opacity,
+	float* final_T,
+	uint32_t* n_contrib,
+	const float* bg_color,
+	float* out_color)
+{
+	renderCUDA<NUM_CHANNELS> << <grid, block, 0, stream >> > (
+		ranges,
+		point_list,
+		W, H,
+		means2D,
+		colors,
+		conic_opacity,
+		final_T,
+		n_contrib,
+		bg_color,
+		out_color);
+}
+
 void FORWARD::render(
 	const dim3 grid, dim3 block,
 	const uint2* ranges,
@@ -399,7 +426,8 @@ void FORWARD::render(
 		out_color);
 }
 
-void FORWARD::preprocess(int P, int D, int M,
+void FORWARD::preprocess(
+	int P, int D, int M,
 	const float* means3D,
 	const glm::vec3* scales,
 	const float scale_modifier,
@@ -426,6 +454,64 @@ void FORWARD::preprocess(int P, int D, int M,
 	bool prefiltered)
 {
 	preprocessCUDA<NUM_CHANNELS> << <(P + 255) / 256, 256 >> > (
+		P, D, M,
+		means3D,
+		scales,
+		scale_modifier,
+		rotations,
+		opacities,
+		shs,
+		clamped,
+		cov3D_precomp,
+		colors_precomp,
+		viewmatrix, 
+		projmatrix,
+		cam_pos,
+		W, H,
+		tan_fovx, tan_fovy,
+		focal_x, focal_y,
+		radii,
+		means2D,
+		depths,
+		cov3Ds,
+		rgb,
+		conic_opacity,
+		grid,
+		tiles_touched,
+		prefiltered
+		);
+}
+
+void FORWARD::preprocessJAX(
+	cudaStream_t stream, // NEW
+
+	int P, int D, int M,
+	const float* means3D,
+	const glm::vec3* scales,
+	const float scale_modifier,
+	const glm::vec4* rotations,
+	const float* opacities,
+	const float* shs,
+	bool* clamped,
+	const float* cov3D_precomp,
+	const float* colors_precomp,
+	const float* viewmatrix,
+	const float* projmatrix,
+	const glm::vec3* cam_pos,
+	const int W, int H,
+	const float focal_x, float focal_y,
+	const float tan_fovx, float tan_fovy,
+	int* radii,
+	float2* means2D,
+	float* depths,
+	float* cov3Ds,
+	float* rgb,
+	float4* conic_opacity,
+	const dim3 grid,
+	uint32_t* tiles_touched,
+	bool prefiltered)
+{
+	preprocessCUDA<NUM_CHANNELS> << <(P + 255) / 256, 256, 0, stream >> > (
 		P, D, M,
 		means3D,
 		scales,

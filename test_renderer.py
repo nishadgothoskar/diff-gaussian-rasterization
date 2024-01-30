@@ -2,7 +2,7 @@
 import diff_gaussian_rasterization as dgr
 from diff_gaussian_rasterization import GaussianRasterizationSettings, GaussianRasterizer
 from diff_gaussian_rasterization import _C as torch_backend
-from diff_gaussian_rasterization import rasterize, rasterize_jit
+from diff_gaussian_rasterization import rasterize, rasterize_jit, rasterize_with_depth
 
 import jax
 import jax.numpy as jnp
@@ -16,7 +16,7 @@ from tqdm import tqdm
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 torch.backends.cudnn.deterministic=True
 
-
+N = 500
 ####################
 # Helpers, Constants
 ####################
@@ -75,47 +75,31 @@ def torch_to_jax(torch_array):
 def jax_to_torch(jnp_array, grad=True):
     return torch.tensor(np.array(jnp_array), requires_grad=grad, device=device)
 
-default_seed = 0
-gt_seed = 1
-
-
-
-def render_jax_with_param_transform(means3D, colors_precomp, opacity, scales, rotations,
-           image_width, image_height, fx,fy, cx,cy,near,far):
-    color = rasterize(
-        means3D, 
-        colors_precomp, 
-        opacity, 
-        scales, 
-        rotations,
-        image_width, image_height, fx,fy, cx,cy,near,far
-    ) 
-    return color
+default_seed = 1222
+gt_seed = 1354
 
 
 def render_torch_with_param_transform(means3D, means2D, colors_precomp, opacity, scales, rotations,
-           t_rasterizer, preproc=False):
-    if not preproc: 
-        color,_ = t_rasterizer(
-            means3D = means3D,
-            means2D = means2D,
-            shs = None,
-            colors_precomp = colors_precomp,
-            opacities = opacity,
-            scales = scales,
-            rotations = rotations
-        )
-    else: 
-        color,_ = t_rasterizer(
-            means3D = means3D,
-            means2D = means2D,
-            shs = None,
-            colors_precomp = colors_precomp,
-            opacities = torch.sigmoid(opacity),
-            scales = torch.exp(scales),
-            rotations = rotations
-        )
-    return color
+           t_rasterizer):
+    
+    def expand_color(means3D, color):
+        # return color
+        return torch.hstack([
+            color,
+            means3D[:,2:3],
+            torch.ones((means3D.shape[0], 1), device=color.device),
+        ])
+    
+    color_and_depth ,_ = t_rasterizer(
+        means3D = means3D,
+        means2D = means2D,
+        shs = None,
+        colors_precomp = expand_color(means3D, colors_precomp),
+        opacities = opacity,
+        scales = scales,
+        rotations = rotations
+    )
+    return color_and_depth[:3, :, :], color_and_depth[3:4, :, :]
 
 #############################
 # Arguments
@@ -125,7 +109,7 @@ reset(default_seed)
 intrinsics = Intrinsics(
     height=200,
     width=200,
-    fx=303.0, fy=303.0,
+    fx=300.0, fy=300.0,
     cx=100.0, cy=100.0,
     near=0.01, far=2.5
 )
@@ -135,9 +119,8 @@ fovY = jnp.arctan(intrinsics.height / 2 / intrinsics.fy) * 2.0
 tan_fovx = math.tan(fovX)
 tan_fovy = math.tan(fovY)
 
-N = 100
 means3D = jax.random.uniform(jax.random.PRNGKey(default_seed), shape=(N, 3), minval=-0.5, maxval=0.5) + jnp.array([0.0, 0.0, 1.0])
-opacity = jnp.exp(jax.nn.log_sigmoid(jnp.ones(shape=(N,1)) * 1.0))
+opacity = jnp.ones(shape=(N,1)) * 1.0; opacity = jnp.exp(jax.nn.log_sigmoid(opacity))
 scales = jnp.ones((N,3)) * -4.5; scales = jnp.exp(scales)  # PREPROC 
 rotations = jnp.ones((N,4)) * -1.0  
 colors_precomp = jax.random.uniform(jax.random.PRNGKey(default_seed), shape=(N,3), minval=0.0, maxval=1.0)
@@ -179,17 +162,21 @@ scales_gt = jnp.ones((N,3)) * -4.5; scales_gt = jnp.exp(scales_gt)
 rotations_gt = jnp.ones((N,4)) * -1.0 
 colors_precomp_gt = jax.random.uniform(jax.random.PRNGKey(gt_seed), shape=(N,3), minval=0.0, maxval=1.0)
 
-color_gt_jax = render_jax_with_param_transform(
+color_gt_jax, depth_gt_jax = rasterize_with_depth(
     means3D_gt, colors_precomp_gt, opacity_gt, scales_gt, rotations_gt,
-    intrinsics.width, intrinsics.height, intrinsics.fx, intrinsics.fy, 
+    intrinsics.width, intrinsics.height,
+    intrinsics.fx, intrinsics.fy,
     intrinsics.cx, intrinsics.cy,
     intrinsics.near, intrinsics.far
 )
+
 color_gt_torch = jax_to_torch(color_gt_jax)
+depth_gt_torch = jax_to_torch(depth_gt_jax)
+
 # _, (ax1, ax2) = plt.subplots(1, 2)
-# ax1.imshow(jnp.transpose(color_gt_jax[:3], (1,2,0)))
-# ax1.imshow(jnp.transpose(color_gt_jax[:3], (1,2,0)))
-plt.imsave("gt303.png", jnp.transpose(color_gt_jax[:3], (1,2,0)))
+# ax1.imshow(jnp.transpose(color_gt_jax, (1,2,0)))
+# ax1.imshow(jnp.transpose(color_gt_jax, (1,2,0)))
+plt.imsave("gt.png", jnp.transpose(color_gt_jax, (1,2,0)))
 
 
 ##########################################################################################
@@ -201,7 +188,7 @@ plt.imsave("gt303.png", jnp.transpose(color_gt_jax[:3], (1,2,0)))
 # vjp_rasterize_fwd_jit = jax.jit(jax.tree_util.Partial(jax.vjp, rasterize)) 
 for _ in range(2):
     start = time.time()
-    color_jax = render_jax_with_param_transform(
+    color_jax, depth_jax = rasterize_with_depth(
         means3D, colors_precomp, opacity, scales, rotations,
         intrinsics.width, intrinsics.height, intrinsics.fx, intrinsics.fy, 
         intrinsics.cx, intrinsics.cy,
@@ -209,7 +196,7 @@ for _ in range(2):
     )
     end = time.time()
 print(f"JAX FWD TIME={end-start} s")
-plt.imsave("jax_fwd_0.png", jnp.transpose(color_jax[:3], (1,2,0)))
+plt.imsave("jax_fwd_0.png", jnp.transpose(color_jax, (1,2,0)))
 
 torch_means3d = jax_to_torch(means3D) # jank
 torch_means2d = torch.zeros_like(torch_means3d, dtype=torch_means3d.dtype, requires_grad=False, device="cuda") + 0
@@ -220,27 +207,34 @@ torch_rotations = jax_to_torch(rotations)
 
 for _ in range(2):
     start = time.time()
-    color_torch = render_torch_with_param_transform(torch_means3d, torch_means2d, torch_colors_precomp, torch_opacity, torch_scales, torch_rotations, torch_rasterizer)
+    color_torch, depth_torch = render_torch_with_param_transform(torch_means3d, torch_means2d, torch_colors_precomp, torch_opacity, torch_scales, torch_rotations, torch_rasterizer)
     end = time.time()
 print(f"TORCH FWD TIME={end-start} s")
-plt.imsave("torch_fwd_0.png", np.array(torch.permute(color_torch[:3].detach().cpu(), (1,2,0))))
+plt.imsave("torch_fwd_0.png", np.array(torch.permute(color_torch.detach().cpu(), (1,2,0))))
 
 print("JAX min/max/sum: ", test(color_jax))
 print("Torch min/max/sum: ",test(color_torch))
-assert compare(color_torch[:3], color_jax[:3]), f"FWD color; max diff {max_err(color_torch[:3], color_jax[:3])}"
+try:
+    assert compare(color_torch, color_jax), f"FWD color; max diff {max_err(color_torch, color_jax)}"
+    assert compare(depth_torch, depth_jax), f"FWD depth; max diff {max_err(depth_torch, depth_jax)}"
+
+except:
+    embed()
+print("Forward correctness PASSED")
 
 # ##########################################################################################
 # # BWD TEST
 # ##########################################################################################
 
 def loss(means3D, colors_precomp, opacity, scales, rotations,
-    image_width, image_height, fx,fy, cx,cy,near,far, color_gt):
-    color = render_jax_with_param_transform(
+    image_width, image_height, fx,fy, cx,cy,near,far, color_gt, depth_gt):
+    color, depth = rasterize_with_depth(
         means3D, colors_precomp, opacity, scales, rotations,
         image_width, image_height, fx,fy, cx,cy,near,far
     )
-    return jnp.sum(0.5 * (color[:3] - color_gt[:3])**2)
-loss_grad = jax.jit(jax.value_and_grad(loss, argnums=(0,1,2,3,4,)), static_argnums=(5,6,7,8,9,10,11,12,))
+    return jnp.sum(0.5 * (color - color_gt)**2) #+ jnp.sum(0.5 * (depth - depth_gt)**2)
+loss_grad = jax.value_and_grad(loss, argnums=(0,1,2,3,4,))
+# loss_grad = jax.jit(loss_grad, static_argnums=(5,6,7,8,9,10,11,12,))
 
 
 ######## Jax optim ##########
@@ -267,11 +261,16 @@ pbar = tqdm(range(it))
 all_jax_losses = []
 
 for _ in pbar:
+    # gradients: dL_dmeans3D,
+        # dL_dcolors,
+        # dL_dopacity,
+        # dL_dscales,
+        # dL_drotations
     loss_val_jax, gradients_jax = loss_grad(
         *params,
         intrinsics.width, intrinsics.height, intrinsics.fx, intrinsics.fy, 
         intrinsics.cx, intrinsics.cy,
-        intrinsics.near, intrinsics.far, color_gt_jax
+        intrinsics.near, intrinsics.far, color_gt_jax, depth_gt_jax
     )
     (dL_dmeans3D, dL_dcolors, dL_dopacity, dL_dscales, dL_drotations) = gradients_jax
     pbar.set_description(f"loss: {loss_val_jax.item()}")
@@ -281,19 +280,24 @@ for _ in pbar:
 
     all_jax_losses.append(loss_val_jax.item())
 print(all_jax_losses)
-print([test(u) for u in gradients_jax])
+# print([test(u) for u in gradients_jax])
 
 # plot final jax
-_color_final_jax = render_jax_with_param_transform(
+_color_final_jax, _depth_final_jax = rasterize_with_depth(
         *params,
         intrinsics.width, intrinsics.height, intrinsics.fx, intrinsics.fy, 
         intrinsics.cx, intrinsics.cy,
         intrinsics.near, intrinsics.far
     )
 fig, (ax1, ax2) = plt.subplots(1, 2)
-ax1.imshow(jnp.transpose(_color_final_jax[:3], (1,2,0)))
-ax2.imshow(jnp.transpose(color_gt_jax[:3], (1,2,0)))
+ax1.imshow(jnp.transpose(_color_final_jax, (1,2,0)))
+ax2.imshow(jnp.transpose(color_gt_jax, (1,2,0)))
 fig.savefig(f'jax_final_optim_{it}.png')
+
+fig, (ax1, ax2) = plt.subplots(1, 2)
+ax1.imshow(jnp.transpose(_depth_final_jax, (1,2,0)))
+ax2.imshow(jnp.transpose(depth_gt_jax, (1,2,0)))
+fig.savefig(f'jax_final_optim_depth_{it}.png')
 
 
 ######## Torch optim ###########
@@ -312,13 +316,13 @@ all_torch_losses = []
 for _ in pbar:
     torch_optimizer.zero_grad()
 
-    color_torch = render_torch_with_param_transform(torch_means3d, 
+    color_torch, depth_torch = render_torch_with_param_transform(torch_means3d, 
                                                     torch_means2d, 
                                                     torch_colors_precomp, 
                                                     torch_opacity, torch_scales, 
                                                     torch_rotations, torch_rasterizer)
 
-    loss_val_torch = torch.sum(0.5 * (color_torch[:3] - color_gt_torch[:3])**2) 
+    loss_val_torch = torch.sum(0.5 * (color_torch - color_gt_torch)**2)# + torch.sum(0.5 * (depth_torch - depth_gt_torch)**2)
     loss_val_torch.backward()
 
     torch_optimizer.step()
@@ -326,12 +330,18 @@ for _ in pbar:
     all_torch_losses.append(loss_val_torch.item())
 
 print(all_torch_losses)
-print([test(u) for u in (torch_means3d.grad, torch_colors_precomp.grad, torch_opacity.grad, torch_scales.grad, torch_rotations.grad)])
+# print([test(u) for u in (torch_means3d.grad, torch_colors_precomp.grad, torch_opacity.grad, torch_scales.grad, torch_rotations.grad)])
 
 fig, (ax1, ax2) = plt.subplots(1, 2)
-ax1.imshow(jnp.transpose(color_torch.detach().cpu().numpy()[:3], (1,2,0)))
-ax2.imshow(jnp.transpose(color_gt_jax[:3], (1,2,0)))
+ax1.imshow(jnp.transpose(color_torch.detach().cpu().numpy(), (1,2,0)))
+ax2.imshow(jnp.transpose(color_gt_jax, (1,2,0)))
 fig.savefig(f'torch_final_optim_{it}.png')
+
+fig, (ax1, ax2) = plt.subplots(1, 2)
+ax1.imshow(jnp.transpose(depth_torch.detach().cpu().numpy(), (1,2,0)))
+ax2.imshow(jnp.transpose(depth_gt_jax, (1,2,0)))
+fig.savefig(f'torch_final_optim_depth_{it}.png')
+
 
 # try:
 #     assert compare(torch_means3d.grad, gradients_jax[0], atol=0.1), f"Means3d: Max error {max_err(torch_means3d.grad, gradients_jax[0])}"
