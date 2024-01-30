@@ -529,14 +529,6 @@ def getProjectionMatrixJax(width, height, fx, fy, cx, cy, znear, zfar):
 rasterizer_fwd_primitive = _build_rasterize_gaussians_fwd_primitive()
 rasterizer_bwd_primitive = _build_rasterize_gaussians_bwd_primitive()
 
-def expand_color(means3D, color):
-    return color
-    # return jnp.hstack([
-    #     color,
-        # means3D[:,2:3],
-        # jnp.ones((means3D.shape[0], 1)),
-    # ])
-
 @functools.partial(jax.custom_vjp, nondiff_argnums=(5,6,7,8,9,10,11,12))
 def rasterize(
     means3D, colors_precomp, opacity, scales, rotations,
@@ -557,7 +549,7 @@ def rasterize(
     num_rendered, color, radii, geomBuffer, binningBuffer, imgBuffer = rasterizer_fwd_primitive.bind(
                 bg,
                 means3D,
-                expand_color(means3D, colors_precomp),
+                colors_precomp,
                 opacity,
                 scales,
                 rotations,
@@ -590,7 +582,7 @@ def rasterize_fwd(
     num_rendered, color, radii, geomBuffer, binningBuffer, imgBuffer = rasterizer_fwd_primitive.bind(
                 bg,
                 means3D,
-                expand_color(means3D, colors_precomp),
+                colors_precomp,
                 opacity,
                 scales,
                 rotations,
@@ -652,7 +644,7 @@ def rasterize_bwd(image_width, image_height, fx,fy, cx,cy, near, far, res, gradi
                 bg,
                 means3D,
                 radii,
-                expand_color(means3D, colors_precomp),
+                colors_precomp,
                 scales,
                 rotations,
                 view_matrix,
