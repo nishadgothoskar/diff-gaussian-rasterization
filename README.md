@@ -1,7 +1,14 @@
 # Differential Gaussian Rasterization
 
-Used as the rasterization engine for the paper "3D Gaussian Splatting for Real-Time Rendering of Radiance Fields". If you can make use of it in your own research, please be so kind to cite us.
+Used as the rasterization engine for the paper "3D Gaussian Splatting for Real-Time Rendering of Radiance Fields". 
 
+## Installation
+```
+pip install -e .
+```
+System requirements: >=24GB RAM.
+
+### Citation
 <section class="section" id="BibTeX">
   <div class="container is-max-desktop content">
     <h2 class="title">BibTeX</h2>
