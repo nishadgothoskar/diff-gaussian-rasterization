@@ -8,7 +8,6 @@ pip install -e .
 ```
 System requirements: >=24GB RAM.
 
-### Citation
 <section class="section" id="BibTeX">
   <div class="container is-max-desktop content">
     <h2 class="title">BibTeX</h2>
