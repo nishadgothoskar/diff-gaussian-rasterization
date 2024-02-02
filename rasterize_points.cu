@@ -23,6 +23,210 @@
 #include <fstream>
 #include <string>
 #include <functional>
+#include "rasterize_points.h"
+
+std::function<char*(size_t N)> resizeFunctionalDummy(auto& t) {
+    auto lambda = [&t](size_t N) {
+        // t.resize_({(long long)N});
+		return reinterpret_cast<char*>(t);
+    };
+    return lambda;
+}
+
+
+
+void RasterizeGaussiansCUDAJAX(
+	cudaStream_t stream,
+	void **buffers,
+	const char *opaque, std::size_t opaque_len
+)
+{
+	cudaStreamSynchronize(stream);
+    const RasterizeDescriptor &descriptor = 
+        *UnpackDescriptor<RasterizeDescriptor>(opaque, opaque_len);
+
+	// inputs.[bg, means3D, colors_precomp, opacities, scales, rotations,
+                    //   viewmatrix, projmatrix, campos,cov3D_precomp,
+                    // shs]
+    const float *background = reinterpret_cast<const float *> (buffers[0]);
+    const float *means3D = reinterpret_cast<const float *> (buffers[1]);
+    const float *colors = reinterpret_cast<const float *> (buffers[2]);
+    const float *opacity = reinterpret_cast<const float *> (buffers[3]);
+    const float *scales = reinterpret_cast<const float *> (buffers[4]);
+    const float *rotations = reinterpret_cast<const float *> (buffers[5]);
+	float scale_modifier = 1.0;
+    const float *viewmatrix = reinterpret_cast<const float *> (buffers[6]);
+    const float *projmatrix = reinterpret_cast<const float *> (buffers[7]);
+	const float tan_fovx = descriptor.tan_fovx; 
+	const float tan_fovy = descriptor.tan_fovy;
+
+    const float *campos = reinterpret_cast<const float *> (buffers[8]);
+	const int degree = descriptor.degree;
+	const bool prefiltered = false;
+	const bool debug = false;
+
+	const int P = descriptor.P;
+	const int H = descriptor.image_height;
+	const int W = descriptor.image_width;
+
+	// outputs.
+    int *out_num_rendered = reinterpret_cast<int *> (buffers[9]);
+    float *out_color = reinterpret_cast<float *> (buffers[10]);
+    int *radii = reinterpret_cast<int *> (buffers[11]);
+    char *geomBuffer = reinterpret_cast<char *> (buffers[12]);
+    char *binningBuffer = reinterpret_cast<char *> (buffers[13]);
+    char *imgBuffer = reinterpret_cast<char *> (buffers[14]);
+	
+    cudaMemset(geomBuffer, '\0', descriptor.geombuffer_sz*sizeof(char));
+    cudaMemset(binningBuffer, '\0', descriptor.binningbuffer_sz*sizeof(char));
+    cudaMemset(imgBuffer, '\0',  descriptor.imgbuffer_sz*sizeof(char));
+
+	std::function<char*(size_t)> geomFunc = resizeFunctionalDummy(geomBuffer);
+	std::function<char*(size_t)> binningFunc = resizeFunctionalDummy(binningBuffer);
+	std::function<char*(size_t)> imgFunc = resizeFunctionalDummy(imgBuffer);
+	cudaStreamSynchronize(stream);
+
+	auto cov3D_precomp = nullptr;
+	auto sh = nullptr;
+	int rendered = 0;
+	if(P != 0)
+	{
+		int M = 1;
+		rendered = CudaRasterizer::Rasterizer::forwardJAX(
+		stream,  // NEW
+		geomFunc,
+		binningFunc,
+		imgFunc,
+		P, degree, M,
+		background,
+		W, H,
+		means3D,
+		sh,
+		colors, 
+		opacity, // wtf why was there a difference | .contiguous().data<float>() vs. .contiguous().data_ptr<float>()
+		scales,
+		scale_modifier,
+		rotations,
+		cov3D_precomp, 
+		viewmatrix, 
+		projmatrix,
+		campos,
+		tan_fovx,
+		tan_fovy,
+		prefiltered,
+		out_color,
+		radii,
+		debug);
+		
+	}
+	cudaStreamSynchronize(stream);
+	cudaMemcpy(out_num_rendered, &rendered, sizeof(int), cudaMemcpyDefault);
+	cudaStreamSynchronize(stream);
+
+}
+
+
+void RasterizeGaussiansBackwardCUDAJAX(
+	cudaStream_t stream,
+	void **buffers,
+	const char *opaque, std::size_t opaque_len
+){
+	cudaStreamSynchronize(stream);
+    const RasterizeDescriptor &descriptor = 
+        *UnpackDescriptor<RasterizeDescriptor>(opaque, opaque_len);
+	// image_height, image_width, degree, P
+	const int P = descriptor.P;
+	const int H = descriptor.image_height; // dL_dout_color.size(1)
+	const int W = descriptor.image_width; // dL_dout_color.size(2)
+
+	// inputs
+    const float* background = reinterpret_cast<const float*> (buffers[0]);
+    const float* means3D = reinterpret_cast<const float*> (buffers[1]);
+    const int* radii = reinterpret_cast<const int*> (buffers[2]);
+    const float* colors = reinterpret_cast<const float*> (buffers[3]);
+    const float* scales = reinterpret_cast<const float*> (buffers[4]);
+    const float* rotations = reinterpret_cast<const float*> (buffers[5]);
+	float scale_modifier = 1.0;
+    const float* viewmatrix = reinterpret_cast<const float*> (buffers[6]);
+    const float* projmatrix = reinterpret_cast<const float*> (buffers[7]);
+	const float tan_fovx = descriptor.tan_fovx; 
+	const float tan_fovy = descriptor.tan_fovy;
+	const float* dL_dout_color = reinterpret_cast<const float*> (buffers[8]);
+	const int degree = descriptor.degree;
+	const float* campos = reinterpret_cast<const float*> (buffers[9]);
+	char* geomBuffer = reinterpret_cast<char*> (buffers[10]); 
+	const int* _R = reinterpret_cast<int*> (buffers[11]);
+	char* binningBuffer = reinterpret_cast<char*> (buffers[12]);  
+	char* imageBuffer = static_cast<char*> (buffers[13]);  
+	const bool debug = false;
+	
+	// outputs
+	float* dL_dmeans3D = reinterpret_cast<float*> (buffers[14]);
+	float* dL_dmeans2D = reinterpret_cast<float*> (buffers[15]);
+	float* dL_dcolors = reinterpret_cast<float*> (buffers[16]);
+	float* dL_dconic = reinterpret_cast<float*> (buffers[17]);
+	float* dL_dopacity = reinterpret_cast<float*> (buffers[18]);
+	float* dL_dcov3D = reinterpret_cast<float*> (buffers[19]);
+	float* dL_dsh = reinterpret_cast<float*> (buffers[20]);
+	float* dL_dscales = reinterpret_cast<float*> (buffers[21]);
+	float* dL_drotations = reinterpret_cast<float*> (buffers[22]);
+
+	int R;
+	cudaMemcpy(&R, _R, sizeof(int), cudaMemcpyDefault);
+
+	int M = 1;
+
+    cudaMemset(dL_dmeans3D, 0.0, P*3*sizeof(float));
+    cudaMemset(dL_dmeans2D, 0.0, P*3*sizeof(float));
+    cudaMemset(dL_dcolors, 0.0, P*NUM_CHANNELS*sizeof(float));
+    cudaMemset(dL_dconic, 0.0, P*4*sizeof(float));
+    cudaMemset(dL_dopacity, 0.0, P*1*sizeof(float));
+    cudaMemset(dL_dcov3D, 0.0, P*6*sizeof(float));
+    cudaMemset(dL_dsh, 0.0, P*M*3*sizeof(float));
+    cudaMemset(dL_dscales, 0.0, P*3*sizeof(float));
+    cudaMemset(dL_drotations, 0.0, P*4*sizeof(float));
+	cudaStreamSynchronize(stream);
+
+	auto cov3D_precomp = nullptr;
+	auto sh = nullptr;
+	if(P != 0)
+	{  
+		CudaRasterizer::Rasterizer::backwardJAX(
+		stream,	
+		P, degree, M, R,
+		background,
+		W, H, 
+		means3D,
+		sh,
+		colors,
+		scales,
+		scale_modifier,
+		rotations,
+		cov3D_precomp,
+		viewmatrix,
+		projmatrix,
+		campos,
+		tan_fovx,
+		tan_fovy,
+		radii,
+		geomBuffer,
+		binningBuffer,
+		imageBuffer,
+		dL_dout_color,
+		dL_dmeans2D,
+		dL_dconic,  
+		dL_dopacity,
+		dL_dcolors,
+		dL_dmeans3D,
+		dL_dcov3D,
+		dL_dsh,
+		dL_dscales,
+		dL_drotations,
+		debug);
+	}
+	cudaStreamSynchronize(stream);
+}
+
 
 std::function<char*(size_t N)> resizeFunctional(torch::Tensor& t) {
     auto lambda = [&t](size_t N) {
