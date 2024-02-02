@@ -185,7 +185,7 @@ plt.imsave("gt.png", jnp.transpose(color_gt_jax, (1,2,0)))
 ## Args
 
 ## Run JAX fwd
-# vjp_rasterize_fwd_jit = jax.jit(jax.tree_util.Partial(jax.vjp, rasterize)) 
+rasterize_with_depth = jax.jit(rasterize_with_depth, static_argnums=(5,6,7,8,9,10,11,12))
 for _ in range(2):
     start = time.time()
     color_jax, depth_jax = rasterize_with_depth(
@@ -232,9 +232,9 @@ def loss(means3D, colors_precomp, opacity, scales, rotations,
         means3D, colors_precomp, opacity, scales, rotations,
         image_width, image_height, fx,fy, cx,cy,near,far
     )
-    return jnp.sum(0.5 * (color - color_gt)**2) #+ jnp.sum(0.5 * (depth - depth_gt)**2)
+    return jnp.sum(0.5 * (color - color_gt)**2) + jnp.sum(0.5 * (depth - depth_gt)**2)
 loss_grad = jax.value_and_grad(loss, argnums=(0,1,2,3,4,))
-# loss_grad = jax.jit(loss_grad, static_argnums=(5,6,7,8,9,10,11,12,))
+loss_grad = jax.jit(loss_grad, static_argnums=(5,6,7,8,9,10,11,12,))
 
 
 ######## Jax optim ##########
@@ -341,22 +341,3 @@ fig, (ax1, ax2) = plt.subplots(1, 2)
 ax1.imshow(jnp.transpose(depth_torch.detach().cpu().numpy(), (1,2,0)))
 ax2.imshow(jnp.transpose(depth_gt_jax, (1,2,0)))
 fig.savefig(f'torch_final_optim_depth_{it}.png')
-
-
-# try:
-#     assert compare(torch_means3d.grad, gradients_jax[0], atol=0.1), f"Means3d: Max error {max_err(torch_means3d.grad, gradients_jax[0])}"
-#     assert compare(torch_colors_precomp.grad, gradients_jax[1]), f"Colors: Max error {max_err(torch_colors_precomp.grad, gradients_jax[1])}"
-#     assert compare(torch_opacity.grad, gradients_jax[2]), f"Opacity: Max error {max_err(torch_opacity.grad, gradients_jax[2])}"
-#     assert compare(torch_scales.grad, gradients_jax[3]), f"Scales: Max error {max_err(torch_scales.grad, gradients_jax[3])}"
-#     assert compare(torch_rotations.grad, gradients_jax[4]), f"Rotations: Max error {max_err(torch_rotations.grad, gradients_jax[4])}"
-# except AssertionError:
-#     print("NOT GOOD")
-#     print(f"Means3d: Max error {max_err(torch_means3d.grad, gradients_jax[0])}, torch min/max/sum {test(torch_means3d.grad)}, jax min/max/sum{test(gradients_jax[0])}")
-#     print(f"Colors: Max error {max_err(torch_colors_precomp.grad, gradients_jax[1])}, torch min/max/sum {test(torch_colors_precomp.grad)}, jax min/max/sum{test(gradients_jax[1])}")
-    
-#     print(f"Opacity: Max error {max_err(torch_opacity.grad, gradients_jax[2])}, torch min/max/sum {test(torch_opacity.grad)}, jax min/max/sum{test(gradients_jax[2])}")
-#     print(f"Scales: Max error {max_err(torch_scales.grad, gradients_jax[3])}, torch min/max/sum {test(torch_scales.grad)}, jax min/max/sum{test(gradients_jax[3])}")
-#     print(f"Rotations: Max error {max_err(torch_rotations.grad, gradients_jax[4])}, torch min/max/sum {test(torch_rotations.grad)}, jax min/max/sum{test(gradients_jax[4])}")
-#     from IPython import embed; embed()
-
-from IPython import embed; embed()

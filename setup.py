@@ -14,6 +14,18 @@ from torch.utils.cpp_extension import CUDAExtension, BuildExtension
 import os
 os.path.dirname(os.path.abspath(__file__))
 
+from distutils.core import setup
+from setuptools.command.develop import develop
+from subprocess import check_call
+from os import path
+
+class update_submodules(develop):
+    def run(self):
+        if path.exists('.git'):
+            check_call(['git', 'submodule', 'update', '--init', '--recursive'])
+        develop.run(self)
+
+
 setup(
     name="diff_gaussian_rasterization",
     packages=['diff_gaussian_rasterization'],
@@ -29,6 +41,7 @@ setup(
             extra_compile_args={"nvcc": ["-I" + os.path.join(os.path.dirname(os.path.abspath(__file__)), "third_party/glm/")]})
         ],
     cmdclass={
-        'build_ext': BuildExtension
+        'build_ext': BuildExtension, 
+        'develop': update_submodules,
     }
 )

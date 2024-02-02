@@ -2,7 +2,7 @@
 import diff_gaussian_rasterization as dgr
 from diff_gaussian_rasterization import GaussianRasterizationSettings, GaussianRasterizer
 from diff_gaussian_rasterization import _C as torch_backend
-from diff_gaussian_rasterization import rasterize, rasterize_jit
+from diff_gaussian_rasterization import rasterize, rasterize_jit, rasterize_with_depth
 
 import jax
 import jax.numpy as jnp
@@ -17,7 +17,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 torch.backends.cudnn.deterministic=True
 
 
-N = 200
+N = 50
 
 ####################
 # Helpers, Constants
@@ -32,17 +32,17 @@ def getProjectionMatrix(znear, zfar, fovX, fovY):
     right = tanHalfFovX * znear
     left = -right
 
-    P = torch.zeros(4, 4)
+    P = np.zeros((4, 4))
 
     z_sign = 1.0
 
-    P[0, 0] = 2.0 * znear / (right - left)
-    P[1, 1] = 2.0 * znear / (top - bottom)
-    P[0, 2] = (right + left) / (right - left)
-    P[1, 2] = (top + bottom) / (top - bottom)
-    P[3, 2] = z_sign
-    P[2, 2] = z_sign * zfar / (zfar - znear)
-    P[2, 3] = -(zfar * znear) / (zfar - znear)
+    P[0][0] = 2.0 * znear / (right - left)
+    P[1][1] = 2.0 * znear / (top - bottom)
+    P[0][2] = (right + left) / (right - left)
+    P[1][2] = (top + bottom) / (top - bottom)
+    P[3][2] = z_sign
+    P[2][2] = z_sign * zfar / (zfar - znear)
+    P[2][3] = -(zfar * znear) / (zfar - znear)
     return P
 
 def test(arr):
@@ -65,36 +65,32 @@ class Intrinsics(NamedTuple):
     near: float
     far: float
 
-def compare(t, j, atol=1e-6):
-    return torch.allclose(t, jax_to_torch(j), atol=atol)
-
-def max_err(t, j):
-    return torch.max(torch.abs(t - jax_to_torch(j)))
-
-def torch_to_jax(torch_array):
-    return jnp.array(torch_array.detach().cpu().numpy())
-
-def jax_to_torch(jnp_array, grad=True):
-    return torch.tensor(np.array(jnp_array), requires_grad=grad, device=device)
-
 default_seed = 1223
 gt_seed = 1354
 
 
 
-def render_jax_with_param_transform(means3D, colors_precomp, opacity, scales, rotations):
-    image_width, image_height, fx,fy = intrinsics.width, intrinsics.height, intrinsics.fx, intrinsics.fy
-    cx, cy, near, far = intrinsics.cx, intrinsics.cy, intrinsics.near, intrinsics.far
-    color = rasterize_jit(
-        means3D, 
-        colors_precomp, 
-        opacity, 
-        scales, 
-        rotations,
-        image_width, image_height, fx,fy, cx,cy,near,far
-    ) 
-    return color
-
+def render_torch_with_param_transform(means3D, means2D, colors_precomp, opacity, scales, rotations,
+           t_rasterizer):
+    
+    def expand_color(means3D, color):
+        # return color
+        return torch.hstack([
+            color,
+            means3D[:,2:3],
+            torch.ones((means3D.shape[0], 1), device=color.device),
+        ])
+    
+    color_and_depth ,_ = t_rasterizer(
+        means3D = means3D,
+        means2D = means2D,
+        shs = None,
+        colors_precomp = expand_color(means3D, colors_precomp),
+        opacities = opacity,
+        scales = scales,
+        rotations = rotations
+    )
+    return color_and_depth[:3, :, :], color_and_depth[3:4, :, :]
 
 
 #############################
@@ -105,7 +101,7 @@ reset(default_seed)
 intrinsics = Intrinsics(
     height=200,
     width=200,
-    fx=303.0, fy=303.0,
+    fx=300.0, fy=300.0,
     cx=100.0, cy=100.0,
     near=0.01, far=2.5
 )
@@ -124,12 +120,10 @@ colors_precomp = jax.random.uniform(jax.random.PRNGKey(default_seed), shape=(N,3
 sh_jax = jnp.array([])
 
 camera_pose_jax = jnp.eye(4)
-_proj_matrix = getProjectionMatrix(0.01, 100.0, fovX, fovY).transpose(0,1).cuda()
-view_matrix_torch = torch.transpose(torch.tensor(np.array(jnp.linalg.inv(camera_pose_jax))),0,1).cuda()
-projmatrix_torch = view_matrix_torch @ _proj_matrix
+_proj_matrix = jnp.transpose(getProjectionMatrix(0.01, 100.0, fovX, fovY))
 
-view_matrix = jnp.array(view_matrix_torch.cpu().numpy())
-projmatrix = jnp.array(projmatrix_torch.cpu().numpy())
+view_matrix = jnp.transpose(jnp.linalg.inv(camera_pose_jax))
+projmatrix = view_matrix @ _proj_matrix
 
 
 
@@ -142,14 +136,18 @@ scales_gt = jnp.ones((N,3)) * -4.5; scales_gt = jnp.exp(scales_gt)
 rotations_gt = jnp.ones((N,4)) * -1.0 
 colors_precomp_gt = jax.random.uniform(jax.random.PRNGKey(gt_seed), shape=(N,3), minval=0.0, maxval=1.0)
 
-color_gt_jax = render_jax_with_param_transform(
+color_gt_jax, depth_gt_jax = rasterize_with_depth(
     means3D_gt, colors_precomp_gt, opacity_gt, scales_gt, rotations_gt,
+    intrinsics.width, intrinsics.height,
+    intrinsics.fx, intrinsics.fy,
+    intrinsics.cx, intrinsics.cy,
+    intrinsics.near, intrinsics.far
 )
 
-# _, (ax1, ax2) = plt.subplots(1, 2)
-# ax1.imshow(jnp.transpose(color_gt_jax[:3], (1,2,0)))
-# ax1.imshow(jnp.transpose(color_gt_jax[:3], (1,2,0)))
-plt.imsave("gt303.png", jnp.transpose(color_gt_jax[:3], (1,2,0)))
+_, (ax1, ax2) = plt.subplots(1, 2)
+ax1.imshow(jnp.transpose(color_gt_jax[:3], (1,2,0)))
+ax1.imshow(jnp.transpose(color_gt_jax[:3], (1,2,0)))
+plt.imsave("gt.png", jnp.transpose(color_gt_jax[:3], (1,2,0)))
 
 
 ##########################################################################################
@@ -161,28 +159,30 @@ plt.imsave("gt303.png", jnp.transpose(color_gt_jax[:3], (1,2,0)))
 # vjp_rasterize_fwd_jit = jax.jit(jax.tree_util.Partial(jax.vjp, rasterize)) 
 for _ in range(2):
     start = time.time()
-    color_jax = render_jax_with_param_transform(
-        means3D, colors_precomp, opacity, scales, rotations
+    color_jax, depth_jax = rasterize_with_depth(
+        means3D, colors_precomp, opacity, scales, rotations,
+        intrinsics.width, intrinsics.height, intrinsics.fx, intrinsics.fy, 
+        intrinsics.cx, intrinsics.cy,
+        intrinsics.near, intrinsics.far
     )
     end = time.time()
 print(f"JAX FWD TIME={end-start} s")
-plt.imsave("jax_fwd_0.png", jnp.transpose(color_jax[:3], (1,2,0)))
+plt.imsave("jax_fwd_0.png", jnp.transpose(color_jax, (1,2,0)))
 print("JAX min/max/sum: ", test(color_jax))
 
 # ##########################################################################################
 # # BWD TEST
 # ##########################################################################################
 
-def loss(means3D, colors_precomp, opacity, scales, rotations, color_gt):
-    color = render_jax_with_param_transform(
+def loss(means3D, colors_precomp, opacity, scales, rotations, color_gt, depth_gt):
+    color, depth = rasterize_with_depth(
         means3D, colors_precomp, opacity, scales, rotations,
+        intrinsics.width, intrinsics.height, intrinsics.fx, intrinsics.fy, 
+        intrinsics.cx, intrinsics.cy,
+        intrinsics.near, intrinsics.far
     )
-    return jnp.sum(0.5 * (color[:3] - color_gt[:3])**2), color
-# loss = jax.tree_util.Partial(_loss, image_width=Intrinsics.width, image_height=Intrinsics.height, 
-#                              fx=Intrinsics.fx, fy=Intrinsics.fy, 
-#                              cx=Intrinsics.cx, cy=Intrinsics.cy, 
-#                              near=Intrinsics.near, far=Intrinsics.far)
-loss_grad = jax.value_and_grad(loss, argnums=(0,1,2,3,4,), has_aux=True)
+    return jnp.sum(0.5 * (color - color_gt)**2) + jnp.sum(0.5 * (depth - depth_gt)**2)
+loss_grad = jax.value_and_grad(loss, argnums=(0,1,2,3,4,))
 loss_grad = jax.jit(loss_grad)
 
 ######## Jax optim ##########
@@ -210,12 +210,10 @@ tx = optax.multi_transform(
 pbar = tqdm(range(it))
 def inference_optax(params, tx, jit=False):
     def step(params, state):
-        (loss_val_jax, color_out), gradients_jax = loss_grad(
-            *params, color_gt_jax
+        loss_val_jax, gradients_jax = loss_grad(
+            *params, color_gt_jax, depth_gt_jax
         )
-        # jax.debug.print("COLOR OUT={color_out_sum}", color_out_sum=color_out.sum())
         (dL_dmeans3D, dL_dcolors, dL_dopacity, dL_dscales, dL_drotations) = gradients_jax
-        # jax.debug.print("🤯 gradient1={gradients_jax}, gradient2={gradients_jax1} gradient3={gradients_jax2} 🤯 loss={loss_val_jax}", gradients_jax=gradients_jax[0].sum(), gradients_jax1=gradients_jax[1].sum(), gradients_jax2=gradients_jax[2].sum(), loss_val_jax=loss_val_jax)
 
         updates, state = tx.update(gradients_jax, state, params)
         params = optax.apply_updates(params, updates)
@@ -238,20 +236,26 @@ print("\nOptax jitted")
 params, losses = inference_optax(init_params, tx, jit=True)
 print(losses)
 losses = []
-# print("\nOptax nonjitted")
-# params, losses = inference_optax(init_params, tx, jit=False)
-# print(losses)
+print("\nOptax nonjitted")
+params, losses = inference_optax(init_params, tx, jit=False)
+print(losses)
 
 
 
 
 # plot final jax
-_color_final_jax = render_jax_with_param_transform(
-        *params
-    )
-fig, (ax1, ax2) = plt.subplots(1, 2)
+_color_final_jax, _depth_final_jax = rasterize_with_depth(
+    means3D, colors_precomp, opacity, scales, rotations,
+    intrinsics.width, intrinsics.height,
+    intrinsics.fx, intrinsics.fy,
+    intrinsics.cx, intrinsics.cy,
+    intrinsics.near, intrinsics.far
+)
+fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2)
 ax1.imshow(jnp.transpose(_color_final_jax[:3], (1,2,0)))
 ax2.imshow(jnp.transpose(color_gt_jax[:3], (1,2,0)))
+ax3.imshow(_depth_final_jax[0])
+ax4.imshow(depth_gt_jax[0])
 fig.savefig(f'jax_final_optim_{it}.png')
 
 
