@@ -16,8 +16,10 @@ from tqdm import tqdm
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 torch.backends.cudnn.deterministic=True
 
+import os
+os.environ['XLA_PYTHON_CLIENT_PREALLOCATE'] = "false"
 
-N = 50
+N = int(5e4)
 
 ####################
 # Helpers, Constants
@@ -113,7 +115,7 @@ tan_fovy = math.tan(fovY)
 
 means3D = jax.random.uniform(jax.random.PRNGKey(default_seed), shape=(N, 3), minval=-0.5, maxval=0.5) + jnp.array([0.0, 0.0, 1.0])
 opacity = jnp.exp(jax.nn.log_sigmoid(jnp.ones(shape=(N,1)) * 1.0))
-scales = jnp.exp(jnp.ones((N,3)) * -4.5)  # PREPROC 
+scales = jnp.exp(jnp.ones((N,3)) * -6.5)  # PREPROC 
 rotations = jnp.ones((N,4)) * -1.0  
 colors_precomp = jax.random.uniform(jax.random.PRNGKey(default_seed), shape=(N,3), minval=0.0, maxval=1.0)
 # sh = jax.random.uniform(jax.random.PRNGKey(default_seed), shape=(N,0), minval=0.0, maxval=1.0)
@@ -132,7 +134,7 @@ projmatrix = view_matrix @ _proj_matrix
 ####################################
 means3D_gt = jax.random.uniform(jax.random.PRNGKey(gt_seed), shape=(N, 3), minval=-0.5, maxval=0.5) + jnp.array([0.0, 0.0, 1.0])
 opacity_gt = jnp.ones(shape=(N,1)); opacity_gt = jnp.exp(jax.nn.log_sigmoid(opacity_gt))
-scales_gt = jnp.ones((N,3)) * -4.5; scales_gt = jnp.exp(scales_gt)
+scales_gt = jnp.ones((N,3)) * -6.5; scales_gt = jnp.exp(scales_gt)
 rotations_gt = jnp.ones((N,4)) * -1.0 
 colors_precomp_gt = jax.random.uniform(jax.random.PRNGKey(gt_seed), shape=(N,3), minval=0.0, maxval=1.0)
 
@@ -235,15 +237,16 @@ losses = []
 print("\nOptax jitted")
 params, losses = inference_optax(init_params, tx, jit=True)
 print(losses)
-losses = []
-print("\nOptax nonjitted")
-params, losses = inference_optax(init_params, tx, jit=False)
-print(losses)
+# losses = []
+# print("\nOptax nonjitted")
+# params, losses = inference_optax(init_params, tx, jit=False)
+# print(losses)
 
 
 
 
 # plot final jax
+means3D, colors_precomp, opacity, scales, rotations = params
 _color_final_jax, _depth_final_jax = rasterize_with_depth(
     means3D, colors_precomp, opacity, scales, rotations,
     intrinsics.width, intrinsics.height,
