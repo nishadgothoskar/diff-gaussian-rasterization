@@ -247,7 +247,7 @@ TEN_E_5 = int(1e5)
 TEN_E_6 = int(1e6)
 TEN_E_7 = int(1e7)
 TEN_E_8 = int(1e8)
-
+TEN_E_9 = int(1e9)
 
 for _name, _value in _C.registrations().items():
     xla_client.register_custom_call_target(_name, _value, platform="gpu")
@@ -283,9 +283,9 @@ def _build_rasterize_gaussians_fwd_primitive():
 
         num_gaussians, _ = means3D.shape
 
-        GEOM_BUFFER_SIZE = TEN_E_6 * 5
-        BINNING_BUFFER_SIZE = TEN_E_6 * 5
-        IMG_BUFFER_SIZE = TEN_E_7
+        GEOM_BUFFER_SIZE = 2 * TEN_E_9
+        BINNING_BUFFER_SIZE = 2 * TEN_E_9
+        IMG_BUFFER_SIZE = 2 * TEN_E_9
 
         return [ShapedArray((1,), int_dtype),
                 ShapedArray((NUM_CHANNELS, image_height, image_width),  float_dtype),
@@ -312,9 +312,9 @@ def _build_rasterize_gaussians_fwd_primitive():
         int_to_ir = mlir.dtype_to_ir_type(np.dtype(np.int32))
         byte_to_ir = mlir.dtype_to_ir_type(np.dtype(np.uint8))
 
-        GEOM_BUFFER_SIZE = TEN_E_6 * 5
-        BINNING_BUFFER_SIZE = TEN_E_6 * 5
-        IMG_BUFFER_SIZE = TEN_E_7
+        GEOM_BUFFER_SIZE = 2 * TEN_E_9
+        BINNING_BUFFER_SIZE = 2 * TEN_E_9
+        IMG_BUFFER_SIZE = 2 * TEN_E_9
         
         num_gaussians = ctx.avals_in[1].shape[0]    
         opaque = _C.build_gaussian_rasterize_descriptor(
@@ -477,7 +477,7 @@ def _build_rasterize_gaussians_bwd_primitive():
         ]
         result_types = [mlir.ir.RankedTensorType.get(list(shp), float_to_ir) for shp in output_shapes]
 
-        return custom_call(
+        result = custom_call(
             op_name,
             # Output types
             result_types=result_types,
@@ -487,6 +487,14 @@ def _build_rasterize_gaussians_bwd_primitive():
             operand_layouts=default_layouts(*[i.shape for i in operands_ctx]),
             result_layouts=default_layouts(*output_shapes),
         ).results
+
+        del imgBuffer
+        del binningBuffer
+        del geomBuffer
+
+        return result
+
+
     # *********************************************
     # *  REGISTER THE OP WITH JAX  *
     # *********************************************
