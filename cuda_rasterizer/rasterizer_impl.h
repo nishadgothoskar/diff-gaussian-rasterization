@@ -41,6 +41,7 @@ namespace CudaRasterizer
 		uint32_t* tiles_touched;
 
 		static GeometryState fromChunk(char*& chunk, size_t P);
+		static GeometryState fromChunkJAX(cudaStream_t cudaStream, char*& chunk, size_t P);
 	};
 
 	struct ImageState
@@ -62,6 +63,7 @@ namespace CudaRasterizer
 		char* list_sorting_space;
 
 		static BinningState fromChunk(char*& chunk, size_t P);
+		static BinningState fromChunkJAX(cudaStream_t cudaStream, char*& chunk, size_t P); // new
 	};
 
 	template<typename T> 

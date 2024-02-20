@@ -193,10 +193,45 @@ CudaRasterizer::BinningState CudaRasterizer::BinningState::fromChunk(char*& chun
 	return binning;
 }
 
+CudaRasterizer::GeometryState CudaRasterizer::GeometryState::fromChunkJAX(cudaStream_t cudaStream, char*& chunk, size_t P)
+{
+	GeometryState geom;
+	obtain(chunk, geom.depths, P, 128);
+	obtain(chunk, geom.clamped, P * 3, 128);
+	obtain(chunk, geom.internal_radii, P, 128);
+	obtain(chunk, geom.means2D, P, 128);
+	obtain(chunk, geom.cov3D, P * 6, 128);
+	obtain(chunk, geom.conic_opacity, P, 128);
+	obtain(chunk, geom.rgb, P * 3, 128);
+	obtain(chunk, geom.tiles_touched, P, 128);
+	cub::DeviceScan::InclusiveSum(nullptr, geom.scan_size, geom.tiles_touched, geom.tiles_touched, P, cudaStream);
+	obtain(chunk, geom.scanning_space, geom.scan_size, 128);
+	obtain(chunk, geom.point_offsets, P, 128);
+	return geom;
+}
+
+CudaRasterizer::BinningState CudaRasterizer::BinningState::fromChunkJAX(cudaStream_t cudaStream, char*& chunk, size_t P)
+{
+	BinningState binning;
+	obtain(chunk, binning.point_list, P, 128);
+	obtain(chunk, binning.point_list_unsorted, P, 128);
+	obtain(chunk, binning.point_list_keys, P, 128);
+	obtain(chunk, binning.point_list_keys_unsorted, P, 128);
+	cub::DeviceRadixSort::SortPairs(
+		nullptr, binning.sorting_size,
+		binning.point_list_keys_unsorted, binning.point_list_keys,
+		binning.point_list_unsorted, binning.point_list, P, 
+		0, static_cast<int>(sizeof(uint64_t)*8),   
+		cudaStream);
+	obtain(chunk, binning.list_sorting_space, binning.sorting_size, 128);
+	return binning;
+}
+
+
 // Forward rendering procedure for differentiable rasterization
 // of Gaussians.
 int CudaRasterizer::Rasterizer::forwardJAX(
-	cudaStream_t stream, // NEW
+	cudaStream_t stream,
 
 	std::function<char* (size_t)> geometryBuffer,
 	std::function<char* (size_t)> binningBuffer,
@@ -226,7 +261,7 @@ int CudaRasterizer::Rasterizer::forwardJAX(
 
 	size_t chunk_size = required<GeometryState>(P);
 	char* chunkptr = geometryBuffer(chunk_size);
-	GeometryState geomState = GeometryState::fromChunk(chunkptr, P);
+	GeometryState geomState = GeometryState::fromChunkJAX(stream, chunkptr, P);
 
 	if (radii == nullptr)
 	{
@@ -248,7 +283,7 @@ int CudaRasterizer::Rasterizer::forwardJAX(
 
 	// Run preprocessing per-Gaussian (transformation, bounding, conversion of SHs to RGB)
 	CHECK_CUDA(FORWARD::preprocessJAX(
-		stream, // NEW
+		stream,
 		P, D, M,
 		means3D,
 		(glm::vec3*)scales,
@@ -281,21 +316,23 @@ int CudaRasterizer::Rasterizer::forwardJAX(
 											geomState.scan_size, 
 											geomState.tiles_touched, 
 											geomState.point_offsets, P,
-											stream),  // NEW
+											stream), 
 											debug)
 
 	// Retrieve total number of Gaussian instances to launch and resize aux buffers
+	cudaStreamSynchronize(stream);
 	int num_rendered;
 	CHECK_CUDA(cudaMemcpy(&num_rendered, geomState.point_offsets + P - 1, sizeof(int), cudaMemcpyDeviceToHost), debug);
+	cudaStreamSynchronize(stream);
 
 	size_t binning_chunk_size = required<BinningState>(num_rendered);
 	char* binning_chunkptr = binningBuffer(binning_chunk_size);
-	BinningState binningState = BinningState::fromChunk(binning_chunkptr, num_rendered);
+	BinningState binningState = BinningState::fromChunkJAX(stream, binning_chunkptr, num_rendered);
 
 	// For each instance to be rendered, produce adequate [ tile | depth ] key 
 	// and corresponding dublicated Gaussian indices to be sorted
 	// duplicateWithKeys << <(P + 255) / 256, 256 >> > (
-	duplicateWithKeys << <(P + 255) / 256, 256, 0, stream >> > ( // new syntax
+	duplicateWithKeys << <(P + 255) / 256, 256, 0, stream >> > (  
 		P,
 		geomState.means2D,
 		geomState.depths,
@@ -315,7 +352,8 @@ int CudaRasterizer::Rasterizer::forwardJAX(
 		binningState.point_list_keys_unsorted, binningState.point_list_keys,
 		binningState.point_list_unsorted, binningState.point_list,
 		num_rendered, 0, 32 + bit, 
-		stream=stream),  // NEW
+		stream 
+		),  
 		debug)
 
 	CHECK_CUDA(cudaMemset(imgState.ranges, 0, tile_grid.x * tile_grid.y * sizeof(uint2)), debug);
@@ -323,7 +361,7 @@ int CudaRasterizer::Rasterizer::forwardJAX(
 	// Identify start and end of per-tile workloads in sorted list
 	if (num_rendered > 0)
 		// identifyTileRanges << <(num_rendered + 255) / 256, 256 >> > (
-		identifyTileRanges << <(num_rendered + 255) / 256, 256, 0, stream >> > (  // new
+		identifyTileRanges << <(num_rendered + 255) / 256, 256, 0, stream >> > ( 
 			num_rendered,
 			binningState.point_list_keys,
 			imgState.ranges);
@@ -332,7 +370,7 @@ int CudaRasterizer::Rasterizer::forwardJAX(
 	// Let each tile blend its range of Gaussians independently in parallel
 	const float* feature_ptr = colors_precomp != nullptr ? colors_precomp : geomState.rgb;
 	CHECK_CUDA(FORWARD::renderJAX(
-		stream, // new
+		stream, 
 		tile_grid, block,
 		imgState.ranges,
 		binningState.point_list,
@@ -533,8 +571,8 @@ void CudaRasterizer::Rasterizer::backwardJAX(
 	float* dL_drot,
 	bool debug)
 {
-	GeometryState geomState = GeometryState::fromChunk(geom_buffer, P);
-	BinningState binningState = BinningState::fromChunk(binning_buffer, R);
+	GeometryState geomState = GeometryState::fromChunkJAX(stream, geom_buffer, P);
+	BinningState binningState = BinningState::fromChunkJAX(stream, binning_buffer, R);
 	ImageState imgState = ImageState::fromChunk(img_buffer, width * height);
 
 	if (radii == nullptr)
@@ -553,8 +591,7 @@ void CudaRasterizer::Rasterizer::backwardJAX(
 	// If we were given precomputed colors and not SHs, use them.
 	const float* color_ptr = (colors_precomp != nullptr) ? colors_precomp : geomState.rgb;
 	CHECK_CUDA(BACKWARD::renderJAX(
-		stream,  // new
-
+		stream,  
 		tile_grid,
 		block,
 		imgState.ranges,
@@ -577,8 +614,7 @@ void CudaRasterizer::Rasterizer::backwardJAX(
 	// use the one we computed ourselves.
 	const float* cov3D_ptr = (cov3D_precomp != nullptr) ? cov3D_precomp : geomState.cov3D;
 	CHECK_CUDA(BACKWARD::preprocessJAX(
-		stream, // NEW
-		
+		stream, 
 		P, D, M,
 		(float3*)means3D,
 		radii,

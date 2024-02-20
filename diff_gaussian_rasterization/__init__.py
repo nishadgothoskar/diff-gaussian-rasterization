@@ -247,7 +247,6 @@ TEN_E_5 = int(1e5)
 TEN_E_6 = int(1e6)
 TEN_E_7 = int(1e7)
 TEN_E_8 = int(1e8)
-TEN_E_9 = int(1e9)
 
 for _name, _value in _C.registrations().items():
     xla_client.register_custom_call_target(_name, _value, platform="gpu")
@@ -283,9 +282,9 @@ def _build_rasterize_gaussians_fwd_primitive():
 
         num_gaussians, _ = means3D.shape
 
-        GEOM_BUFFER_SIZE = 2 * TEN_E_9
-        BINNING_BUFFER_SIZE = 2 * TEN_E_9
-        IMG_BUFFER_SIZE = 2 * TEN_E_9
+        GEOM_BUFFER_SIZE = 2 * TEN_E_8
+        BINNING_BUFFER_SIZE = 2 * TEN_E_8
+        IMG_BUFFER_SIZE = 2 * TEN_E_8
 
         return [ShapedArray((1,), int_dtype),
                 ShapedArray((NUM_CHANNELS, image_height, image_width),  float_dtype),
@@ -312,9 +311,9 @@ def _build_rasterize_gaussians_fwd_primitive():
         int_to_ir = mlir.dtype_to_ir_type(np.dtype(np.int32))
         byte_to_ir = mlir.dtype_to_ir_type(np.dtype(np.uint8))
 
-        GEOM_BUFFER_SIZE = 2 * TEN_E_9
-        BINNING_BUFFER_SIZE = 2 * TEN_E_9
-        IMG_BUFFER_SIZE = 2 * TEN_E_9
+        GEOM_BUFFER_SIZE = 2 * TEN_E_8
+        BINNING_BUFFER_SIZE = 2 * TEN_E_8
+        IMG_BUFFER_SIZE = 2 * TEN_E_8
         
         num_gaussians = ctx.avals_in[1].shape[0]    
         opaque = _C.build_gaussian_rasterize_descriptor(
@@ -588,6 +587,7 @@ def rasterize(
                 image_height=image_height, 
                 image_width=image_width,  
     )
+
     return color
 
 def rasterize_fwd(
@@ -621,6 +621,7 @@ def rasterize_fwd(
                 image_height=image_height, 
                 image_width=image_width,  
     )
+
     return color, (
         means3D, colors_precomp, opacity, scales, rotations,
         # image_width, image_height, fx,fy, cx,cy,near,far,
@@ -658,7 +659,6 @@ def rasterize_bwd(image_width, image_height, fx,fy, cx,cy, near, far, res, gradi
     tan_fovx = np.tan(fovX)
     tan_fovy = np.tan(fovY)
     
-
     (dL_dmeans3D,
     dL_dmeans2D,
     dL_dcolors,

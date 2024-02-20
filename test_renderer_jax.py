@@ -9,6 +9,7 @@ import jax.numpy as jnp
 import torch
 import math
 import numpy as np
+import psutil
 import random
 import time 
 import matplotlib.pyplot as plt
@@ -18,8 +19,9 @@ torch.backends.cudnn.deterministic=True
 
 import os
 os.environ['XLA_PYTHON_CLIENT_PREALLOCATE'] = "false"
+os.environ['XLA_PYTHON_CLIENT_ALLOCATOR'] = "platform"
 
-N = int(5e4)
+N = int(2e6)
 
 ####################
 # Helpers, Constants
@@ -115,7 +117,7 @@ tan_fovy = math.tan(fovY)
 
 means3D = jax.random.uniform(jax.random.PRNGKey(default_seed), shape=(N, 3), minval=-0.5, maxval=0.5) + jnp.array([0.0, 0.0, 1.0])
 opacity = jnp.exp(jax.nn.log_sigmoid(jnp.ones(shape=(N,1)) * 1.0))
-scales = jnp.exp(jnp.ones((N,3)) * -6.5)  # PREPROC 
+scales = jnp.exp(jnp.ones((N,3)) * -10)  # PREPROC 
 rotations = jnp.ones((N,4)) * -1.0  
 colors_precomp = jax.random.uniform(jax.random.PRNGKey(default_seed), shape=(N,3), minval=0.0, maxval=1.0)
 # sh = jax.random.uniform(jax.random.PRNGKey(default_seed), shape=(N,0), minval=0.0, maxval=1.0)
@@ -134,7 +136,7 @@ projmatrix = view_matrix @ _proj_matrix
 ####################################
 means3D_gt = jax.random.uniform(jax.random.PRNGKey(gt_seed), shape=(N, 3), minval=-0.5, maxval=0.5) + jnp.array([0.0, 0.0, 1.0])
 opacity_gt = jnp.ones(shape=(N,1)); opacity_gt = jnp.exp(jax.nn.log_sigmoid(opacity_gt))
-scales_gt = jnp.ones((N,3)) * -6.5; scales_gt = jnp.exp(scales_gt)
+scales_gt = jnp.ones((N,3)) * -10; scales_gt = jnp.exp(scales_gt)
 rotations_gt = jnp.ones((N,4)) * -1.0 
 colors_precomp_gt = jax.random.uniform(jax.random.PRNGKey(gt_seed), shape=(N,3), minval=0.0, maxval=1.0)
 
@@ -196,7 +198,7 @@ it = 250
 init_params = (means3D, colors_precomp, opacity, scales, rotations)
 params = init_params
 param_labels = ("means3D", "colors_precomp", "opacity", "scales", "rotations")
-lr1, lr2 = 1e-3, 1e-4
+lr1, lr2 = 1e-3, 1e-3
 tx = optax.multi_transform(
     {
         'means3D': optax.adam(lr1),
@@ -226,13 +228,19 @@ def inference_optax(params, tx, jit=False):
 
     pbar = tqdm(range(it))
     state = tx.init(params)
-    for _ in pbar:
+    for iter in pbar:
+        # if iter % 10 == 0:
+        #     print(f"iter {iter} | {psutil.Process().memory_info().rss / 1024 ** 2:.1f} MB")
         params, state, loss_val_jax = step(params, state)
         pbar.set_description(f"loss: {loss_val_jax}")
         losses.append(loss_val_jax.item())
 
+
     return params , losses
 losses = []
+
+import gc
+gc.collect()
 
 print("\nOptax jitted")
 params, losses = inference_optax(init_params, tx, jit=True)
@@ -259,7 +267,7 @@ ax1.imshow(jnp.transpose(_color_final_jax[:3], (1,2,0)))
 ax2.imshow(jnp.transpose(color_gt_jax[:3], (1,2,0)))
 ax3.imshow(_depth_final_jax[0])
 ax4.imshow(depth_gt_jax[0])
-fig.savefig(f'jax_final_optim_{it}.png')
+fig.savefig(f'jax_final_optim_{it}_{N}.png')
 
 
 from IPython import embed; embed()
